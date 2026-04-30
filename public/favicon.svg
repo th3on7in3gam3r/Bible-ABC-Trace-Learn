@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="#3b82f6"/>
+  <!-- Open book shape -->
+  <path d="M10 18 Q10 16 12 16 L30 18 L30 50 L12 48 Q10 48 10 46 Z" fill="white" opacity="0.95"/>
+  <path d="M54 18 Q54 16 52 16 L34 18 L34 50 L52 48 Q54 48 54 46 Z" fill="white" opacity="0.85"/>
+  <!-- Spine -->
+  <rect x="30" y="16" width="4" height="34" rx="2" fill="#1d4ed8"/>
+  <!-- ABC text -->
+  <text x="20" y="38" font-family="Arial, sans-serif" font-size="11" font-weight="900" fill="#3b82f6" text-anchor="middle">ABC</text>
+  <!-- Cross on right page -->
+  <rect x="40" y="26" width="3" height="14" rx="1.5" fill="#3b82f6"/>
+  <rect x="35" y="30" width="13" height="3" rx="1.5" fill="#3b82f6"/>
+</svg>
