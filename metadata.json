@@ -1,0 +1,6 @@
+{
+  "name": "Bible ABC Trace & Learn",
+  "description": "A fun, Bible-themed letter tracing app for preschoolers to learn their ABCs with 'God is Love' verses and interactive illustrations.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": []
+}
