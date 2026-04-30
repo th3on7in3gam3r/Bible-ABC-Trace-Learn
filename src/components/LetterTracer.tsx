@@ -5,10 +5,12 @@
 
 import React, {useRef, useEffect, useState, useCallback} from 'react';
 import {motion, AnimatePresence} from 'motion/react';
-import {RotateCcw, Check, Volume2, Undo2, Redo2} from 'lucide-react';
+import {RotateCcw, Check, Volume2, Undo2, Redo2, Star} from 'lucide-react';
 
 interface LetterTracerProps {
   letter: string;
+  word: string;
+  verse: string;
   isUppercase: boolean;
   onComplete: () => void;
   voiceRecording?: string;
@@ -20,6 +22,8 @@ interface LetterTracerProps {
 
 export default function LetterTracer({
   letter,
+  word,
+  verse,
   isUppercase,
   onComplete,
   voiceRecording,
@@ -41,6 +45,10 @@ export default function LetterTracer({
   const [cursorPos, setCursorPos] = useState<{x: number, y: number} | null>(null);
   const currentStrokeRef = useRef<{x: number, y: number}[]>([]);
   const particleIdRef = useRef(0);
+  // New: celebration banner + star accuracy
+  const [showBanner, setShowBanner] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [hasTriggeredCelebration, setHasTriggeredCelebration] = useState(false);
 
   const DIFF_CONFIG = {
     easy: { lineWidth: 36, radius: 45, threshold: 60, dotPulse: 3.5 },
@@ -99,26 +107,16 @@ export default function LetterTracer({
 
   const playPhoneticSound = useCallback(() => {
     if (!('speechSynthesis' in window)) return;
-    
-    // Stop any current speech
     window.speechSynthesis.cancel();
 
-    const phonetics: Record<string, string> = {
-      'A': 'A says ah', 'B': 'B says buh', 'C': 'C says cuh', 'D': 'D says duh',
-      'E': 'E says eh', 'F': 'F says fuh', 'G': 'G says guh', 'H': 'H says huh',
-      'I': 'I says ih', 'J': 'J says juh', 'K': 'K says kuh', 'L': 'L says luh',
-      'M': 'M says muh', 'N': 'N says nuh', 'O': 'O says oh', 'P': 'P says puh',
-      'Q': 'Q says quuh', 'R': 'R says ruh', 'S': 'S says sss', 'T': 'T says tuh',
-      'U': 'U says uh', 'V': 'V says vuh', 'W': 'W says wuh', 'X': 'X says ks',
-      'Y': 'Y says yuh', 'Z': 'Z says zuh'
-    };
-
-    const text = phonetics[letter.toUpperCase()] || `${letter} says its own sound`;
+    // Full sentence: "B… Bless… Every good gift is a blessing from God."
+    const text = `${letter.toUpperCase()}... ${word}... ${verse}`;
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.8; // Slightly slower for clarity
-    utterance.pitch = 1.2; // Slightly higher/friendlier pitch
+    utterance.rate = 0.75;
+    utterance.pitch = 1.2;
+    utterance.volume = soundVolume;
     window.speechSynthesis.speak(utterance);
-  }, [letter]);
+  }, [letter, word, verse, soundVolume]);
 
   const calculateTargetPoints = useCallback(() => {
     const canvas = document.createElement('canvas');
@@ -148,7 +146,7 @@ export default function LetterTracer({
     setCoverage(0);
   }, [displayLetter]);
 
-  const drawTemplate = useCallback(() => {
+  const drawTemplate = useCallback((currentCoverage = 0) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -159,28 +157,35 @@ export default function LetterTracer({
 
     ctx.clearRect(0, 0, width, height);
     
-    // Draw background dashed letter
     ctx.font = `bold ${height * 0.8}px "Inter", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
-    // Shadow/Outline guide
-    ctx.strokeStyle = darkMode ? '#334155' : '#e5e7eb'; // Slate 700 or Gray 200
-    ctx.lineWidth = 4;
-    ctx.setLineDash([15, 10]);
-    ctx.strokeText(displayLetter, width / 2, height / 2 + height * 0.05);
-    
-    // Fill subtle
-    ctx.fillStyle = darkMode ? '#1e293b' : '#f9fafb';
+    // Guide fades from full opacity → invisible as coverage increases
+    const guideAlpha = Math.max(0, 1 - currentCoverage / 100);
+
+    // Glowing fill — faint, warm amber glow
+    ctx.globalAlpha = guideAlpha * (darkMode ? 0.12 : 0.18);
+    ctx.fillStyle = darkMode ? '#fbbf24' : '#fde68a'; // amber glow
     ctx.fillText(displayLetter, width / 2, height / 2 + height * 0.05);
-    
+
+    // Dashed outline
+    ctx.globalAlpha = guideAlpha * (darkMode ? 0.25 : 0.35);
+    ctx.strokeStyle = darkMode ? '#475569' : '#cbd5e1';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 9]);
+    ctx.strokeText(displayLetter, width / 2, height / 2 + height * 0.05);
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }, [displayLetter, darkMode]);
 
   useEffect(() => {
-    drawTemplate();
+    drawTemplate(0);
     calculateTargetPoints();
-    setHasPlayedPhonetic(false); // Reset when letter changes
+    setHasPlayedPhonetic(false);
+    setShowBanner(false);
+    setStars(0);
+    setHasTriggeredCelebration(false);
   }, [drawTemplate, calculateTargetPoints]);
 
   const isReady = coverage >= config.threshold;
@@ -192,6 +197,20 @@ export default function LetterTracer({
       setHasPlayedPhonetic(true);
     }
   }, [isReady, hasPlayedPhonetic, playPhoneticSound, playSoundEffect]);
+
+  // Trigger celebration at 80% coverage (once)
+  useEffect(() => {
+    if (coverage >= 80 && !hasTriggeredCelebration && hasStarted) {
+      setHasTriggeredCelebration(true);
+      // Calculate star rating: 80-89% = 1 star, 90-94% = 2 stars, 95%+ = 3 stars
+      const earnedStars = coverage >= 95 ? 3 : coverage >= 90 ? 2 : 1;
+      setStars(earnedStars);
+      setShowBanner(true);
+      playSoundEffect('magic');
+      // Auto-hide banner after 3.5s
+      setTimeout(() => setShowBanner(false), 3500);
+    }
+  }, [coverage, hasTriggeredCelebration, hasStarted, playSoundEffect]);
 
   const addParticle = (x: number, y: number) => {
     const id = particleIdRef.current++;
@@ -236,7 +255,6 @@ export default function LetterTracer({
     // Reset hit states and coverage
     setTargetPointsState(prev => prev.map(pt => ({ ...pt, hit: false })));
     setCoverage(0);
-    drawTemplate();
 
     // Redraw all strokes
     strokes.forEach(stroke => {
@@ -247,7 +265,7 @@ export default function LetterTracer({
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.lineWidth = config.lineWidth;
-      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6'; // Brighter blue for dark mode
+      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
       ctx.shadowBlur = 10;
       ctx.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
 
@@ -273,7 +291,26 @@ export default function LetterTracer({
         return { ...pt, hit };
       });
       const hitCount = next.filter(pt => pt.hit).length;
-      setCoverage((hitCount / next.length) * 100);
+      const newCoverage = next.length > 0 ? (hitCount / next.length) * 100 : 0;
+      setCoverage(newCoverage);
+      // Redraw template with updated coverage so guide fades correctly
+      drawTemplate(newCoverage);
+      // Redraw strokes on top of faded template
+      strokes.forEach(stroke => {
+        if (stroke.length === 0) return;
+        const c = canvas.getContext('2d');
+        if (!c) return;
+        c.beginPath();
+        c.moveTo(stroke[0].x, stroke[0].y);
+        c.lineCap = 'round';
+        c.lineJoin = 'round';
+        c.lineWidth = config.lineWidth;
+        c.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
+        c.shadowBlur = 10;
+        c.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
+        stroke.forEach(pos => c.lineTo(pos.x, pos.y));
+        c.stroke();
+      });
       return next;
     });
   }, [strokes, drawTemplate, config.lineWidth, config.radius, darkMode]);
@@ -360,16 +397,43 @@ export default function LetterTracer({
     setStrokes([]);
     setRedoStack([]);
     currentStrokeRef.current = [];
-    drawTemplate();
+    drawTemplate(0);
     setHasStarted(false);
     setTargetPointsState(prev => prev.map(pt => ({ ...pt, hit: false })));
     setCoverage(0);
     setHasPlayedPhonetic(false);
     setIsFinished(false);
+    setShowBanner(false);
+    setStars(0);
+    setHasTriggeredCelebration(false);
   };
 
   return (
     <div className="flex flex-col items-center gap-4 sm:gap-6 w-full max-w-xl">
+
+      {/* 3-Star Accuracy Row */}
+      <div className="flex items-center gap-3">
+        {[1, 2, 3].map(n => (
+          <motion.div
+            key={n}
+            initial={false}
+            animate={stars >= n
+              ? { scale: [1, 1.4, 1], rotate: [0, 15, -15, 0] }
+              : { scale: 1, rotate: 0 }
+            }
+            transition={{ duration: 0.5, delay: (n - 1) * 0.15 }}
+          >
+            <Star
+              className={`w-8 h-8 sm:w-10 sm:h-10 transition-colors duration-300 ${
+                stars >= n
+                  ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                  : 'text-slate-200 dark:text-slate-700'
+              }`}
+            />
+          </motion.div>
+        ))}
+      </div>
+
       <div className="relative w-full aspect-square bg-white dark:bg-slate-900 rounded-[32px] sm:rounded-[40px] border-4 sm:border-8 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center overflow-hidden cursor-crosshair transition-colors">
         {/* Animated Guiding Dots Overlay */}
         <div className="absolute inset-0 pointer-events-none z-0">
@@ -493,17 +557,17 @@ export default function LetterTracer({
         
         {!hasStarted && (
           <div className="absolute inset-x-0 bottom-8 sm:bottom-12 flex justify-center pointer-events-none z-10">
-            <motion.div 
+            <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
               className="bg-slate-800 dark:bg-slate-700 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-lg"
             >
-              Start Here
+              Start Here ✏️
             </motion.div>
           </div>
         )}
 
-          {/* Progress Ring Background */}
+        {/* Progress Ring */}
         {hasStarted && (
           <div className="absolute bottom-4 right-4 w-12 h-12 pointer-events-none">
             <svg className="w-full h-full transform -rotate-90">
@@ -549,71 +613,58 @@ export default function LetterTracer({
             </motion.div>
           </motion.div>
         )}
+
+        {/* "Wonderful! B is for Bless!" Banner */}
+        <AnimatePresence>
+          {showBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.85 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -30, scale: 0.9 }}
+              transition={{ type: 'spring', bounce: 0.4 }}
+              className="absolute inset-x-4 bottom-16 sm:bottom-20 z-50 pointer-events-none"
+            >
+              <div className="bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-3xl px-6 py-4 shadow-2xl text-center">
+                <p className="text-lg sm:text-2xl font-black tracking-tight leading-tight">
+                  Wonderful! 🎉
+                </p>
+                <p className="text-sm sm:text-base font-bold opacity-90 mt-0.5">
+                  {letter.toUpperCase()} is for <span className="font-black">{word}</span>!
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
+      {/* Controls Row */}
       <div className="flex gap-3 sm:gap-4 w-full h-16 sm:h-20">
         <div className="flex gap-2">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={reset}
-            className="w-16 sm:w-20 bg-slate-100 dark:bg-slate-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shrink-0"
-            title="Reset"
-          >
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={reset}
+            className="w-16 sm:w-20 bg-slate-100 dark:bg-slate-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shrink-0" title="Reset">
             <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 dark:text-slate-500" />
           </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={undo}
-            disabled={strokes.length === 0}
-            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${
-              strokes.length === 0 
-                ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' 
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-            }`}
-            title="Undo"
-          >
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={undo} disabled={strokes.length === 0}
+            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${strokes.length === 0 ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="Undo">
             <Undo2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
           </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${
-              redoStack.length === 0 
-                ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' 
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-            }`}
-            title="Redo"
-          >
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={redo} disabled={redoStack.length === 0}
+            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${redoStack.length === 0 ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="Redo">
             <Redo2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
           </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={playPhoneticSound}
-            className="w-16 sm:w-20 bg-blue-50 dark:bg-blue-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-800 transition-all shrink-0"
-            title="Play Sound"
-          >
+          {/* Speaker: reads "B… Bless… Every good gift is a blessing from God." */}
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={playPhoneticSound}
+            className="w-16 sm:w-20 bg-blue-50 dark:bg-blue-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-800 transition-all shrink-0" title="Read aloud">
             <Volume2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 dark:text-blue-500" />
           </motion.button>
         </div>
-        
+
         <motion.button
           whileHover={isReady ? { scale: 1.02, y: -2 } : {}}
           whileTap={isReady ? { scale: 0.98, y: 0 } : {}}
-          animate={isReady ? { 
+          animate={isReady ? {
             scale: [1, 1.02, 1],
-            boxShadow: [
-              "0 10px 15px -3px rgba(34, 197, 94, 0.3)",
-              "0 20px 25px -5px rgba(34, 197, 94, 0.4)",
-              "0 10px 15px -3px rgba(34, 197, 94, 0.3)"
-            ]
+            boxShadow: ['0 10px 15px -3px rgba(34,197,94,0.3)', '0 20px 25px -5px rgba(34,197,94,0.4)', '0 10px 15px -3px rgba(34,197,94,0.3)'],
           } : {}}
           transition={{ repeat: Infinity, duration: 2 }}
           onClick={() => {
@@ -623,9 +674,9 @@ export default function LetterTracer({
               onComplete();
             }
           }}
-          className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg group transition-all ${
-            isReady 
-              ? 'bg-green-500 text-white border-green-700 shadow-green-200 dark:shadow-none' 
+          className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg transition-all ${
+            isReady
+              ? 'bg-green-500 text-white border-green-700 shadow-green-200 dark:shadow-none'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'
           }`}
         >

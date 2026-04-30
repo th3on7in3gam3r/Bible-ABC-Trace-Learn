@@ -62,6 +62,7 @@ import CelebrationOverlay from './components/CelebrationOverlay';
 import ParentDashboard from './components/ParentDashboard';
 import ParentGate from './components/ParentGate';
 import AddProfileModal from './components/AddProfileModal';
+import ColoringPage from './components/ColoringPage';
 
 const ICONS: Record<string, any> = {
   user: User,
@@ -173,6 +174,7 @@ export default function App() {
   const [showParentGate, setShowParentGate] = useState(false);
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showColoringPage, setShowColoringPage] = useState(false);
   const [gatePurpose, setGatePurpose] = useState<'settings' | 'addProfile'>('settings');
   const [screenTimeRemaining, setScreenTimeRemaining] = useState<number | null>(null);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
@@ -423,6 +425,8 @@ export default function App() {
     // or we can auto-switch to word mode after a small delay
     setTimeout(() => {
       setViewMode('word');
+      // Unlock coloring page as a reward
+      setShowColoringPage(true);
     }, 1500);
   };
 
@@ -996,6 +1000,16 @@ export default function App() {
         onCancel={() => setShowAddProfile(false)}
       />
 
+      {activeProfile && currentLetterIdx !== null && (
+        <ColoringPage
+          letter={alphabet[currentLetterIdx].letter}
+          word={alphabet[currentLetterIdx].word}
+          isOpen={showColoringPage}
+          onClose={() => setShowColoringPage(false)}
+          darkMode={settings.darkMode}
+        />
+      )}
+
       {activeProfile && (
         <CelebrationOverlay 
           isOpen={showCelebration}
@@ -1006,7 +1020,6 @@ export default function App() {
       )}
     </div>
   );
-}
 
 function UserPlusIcon() {
   return (
