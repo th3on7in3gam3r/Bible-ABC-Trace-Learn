@@ -1020,6 +1020,7 @@ export default function App() {
       )}
     </div>
   );
+}
 
 function UserPlusIcon() {
   return (
