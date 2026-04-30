@@ -51,7 +51,8 @@ import {
   Mic,
   Play,
   Bird,
-  Baby
+  Baby,
+  Music2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {DEFAULT_ALPHABET, UserProfile, AppSettings, AlphabetItem} from './types';
@@ -112,6 +113,36 @@ const BADGES = [
   { id: 'master', name: 'Master', icon: 'crown', color: 'bg-yellow-400', description: 'Completed everything!' },
 ];
 
+// Emoji avatars used by the new AddProfileModal (format: "emojiId|bgColor")
+const EMOJI_AVATARS: Record<string, string> = {
+  sheep: '🐑', lion: '🦁', dove: '🕊️', fish: '🐟',
+  star: '⭐', rainbow: '🌈', sun: '☀️', heart: '❤️',
+  angel: '😇', crown: '👑', butterfly: '🦋', turtle: '🐢',
+};
+
+/** Render the avatar circle for a profile — handles both old icon-key format and new "emoji|color" format */
+function AvatarCircle({ avatar, size = 'md' }: { avatar: string; size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = { sm: 'w-11 h-11 text-2xl', md: 'w-16 h-16 text-3xl', lg: 'w-24 h-24 text-5xl' };
+  const cls = sizeClasses[size];
+
+  if (avatar.includes('|')) {
+    const [emojiId, bgColor] = avatar.split('|');
+    const emoji = EMOJI_AVATARS[emojiId] ?? '🐑';
+    return (
+      <div className={`${cls} ${bgColor ?? 'bg-amber-400'} rounded-full flex items-center justify-center ring-4 ring-white dark:ring-slate-800 shadow-md`}>
+        {emoji}
+      </div>
+    );
+  }
+  // Legacy lucide icon format
+  const IconComp = ICONS[avatar] || User;
+  return (
+    <div className={`${cls} bg-blue-500 rounded-full flex items-center justify-center text-white ring-4 ring-white dark:ring-slate-800 shadow-md`}>
+      <IconComp className="w-1/2 h-1/2" />
+    </div>
+  );
+}
+
 export default function App() {
   // --- State ---
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
@@ -147,6 +178,8 @@ export default function App() {
   const [showTimeWarning, setShowTimeWarning] = useState(false);
 
   const screenTimeStartRef = useRef<number>(Date.now());
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   // --- Derived ---
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -175,6 +208,27 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [settings]);
+
+  // Background music
+  useEffect(() => {
+    if (!bgMusicRef.current) {
+      bgMusicRef.current = new Audio('/assets/bg_music.mp3');
+      bgMusicRef.current.loop = true;
+    }
+    bgMusicRef.current.volume = settings.musicVolume;
+  }, [settings.musicVolume]);
+
+  const toggleMusic = useCallback(() => {
+    const audio = bgMusicRef.current;
+    if (!audio) return;
+    if (musicPlaying) {
+      audio.pause();
+      setMusicPlaying(false);
+    } else {
+      audio.play().catch(() => {});
+      setMusicPlaying(true);
+    }
+  }, [musicPlaying]);
 
   // Screen Time Monitor
   useEffect(() => {
@@ -464,26 +518,6 @@ export default function App() {
   };
 
   // --- Views ---
-  const ProfileTile = ({profile}: {profile: UserProfile}) => (
-    <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={() => {
-        playUISound('select');
-        setActiveProfileId(profile.id);
-      }}
-      className="flex flex-col items-center gap-4 p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-xl border-4 border-transparent hover:border-blue-400 transition-all"
-    >
-      <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600">
-        <User className="w-12 h-12" />
-      </div>
-      <span className="text-2xl font-bold text-gray-800 dark:text-white">{profile.name}</span>
-      <div className="flex items-center gap-1 text-amber-500 font-bold">
-        <Trophy className="w-4 h-4" />
-        <span>{profile.points}</span>
-      </div>
-    </motion.button>
-  );
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 select-none overflow-x-hidden flex flex-col pb-20 sm:pb-0 transition-colors duration-300">
@@ -525,13 +559,11 @@ export default function App() {
               animate={{ scale: 1 }}
               className="relative shrink-0"
             >
-              <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900 ring-4 ring-white dark:ring-slate-800 relative z-10">
-                {activeProfile ? (
-                   (() => {
-                     const AvatarIcon = ICONS[activeProfile.avatar] || User;
-                     return <AvatarIcon className="w-6 h-6 sm:w-8 sm:h-8" />;
-                   })()
-                ) : <User className="w-6 h-6 sm:w-8 sm:h-8" />}
+              <div className="relative z-10">
+                {activeProfile
+                  ? <AvatarCircle avatar={activeProfile.avatar} size="sm" />
+                  : <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900 ring-4 ring-white dark:ring-slate-800"><User className="w-6 h-6 sm:w-8 sm:h-8" /></div>
+                }
               </div>
               <motion.div 
                 animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
@@ -548,14 +580,20 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-6 shrink-0">
-          <div className="hidden md:flex gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div 
-                key={i} 
-                className={`w-4 h-4 rounded-full ${i <= (profiles.length % 5 || 5) ? 'bg-yellow-400' : 'bg-slate-200 dark:bg-slate-700'}`} 
-              />
-            ))}
-          </div>
+          {/* Music toggle — replaces the cryptic dots */}
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => { toggleMusic(); playUISound('click'); }}
+            className={`hidden sm:flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all text-xs font-black uppercase tracking-widest ${
+              musicPlaying
+                ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-300'
+            }`}
+          >
+            <Music2 className={`w-4 h-4 ${musicPlaying ? 'animate-pulse' : ''}`} />
+            {musicPlaying ? 'Music On' : 'Music'}
+          </motion.button>
           <div className="flex items-center gap-2 sm:gap-3">
             <motion.button 
               whileHover={{ scale: 1.1, rotate: 5 }}
@@ -629,12 +667,7 @@ export default function App() {
                     }}
                     className="flex flex-col items-center gap-4 sm:gap-6 p-6 sm:p-10 bg-slate-50 dark:bg-slate-800 rounded-[32px] sm:rounded-[40px] border-4 border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-white dark:hover:bg-slate-700 transition-all shadow-sm hover:shadow-xl w-36 sm:w-56"
                   >
-                    <div className="w-16 h-16 sm:w-24 sm:h-24 bg-blue-500 rounded-full flex items-center justify-center text-white ring-4 sm:ring-8 ring-blue-50 dark:ring-blue-900/30">
-                      {(() => {
-                        const AvatarIcon = ICONS[p.avatar] || User;
-                        return <AvatarIcon className="w-8 h-8 sm:w-12 sm:h-12" />;
-                      })()}
-                    </div>
+                    <AvatarCircle avatar={p.avatar} size="lg" />
                     <span className="text-lg sm:text-2xl font-bold truncate w-full text-center dark:text-white">{p.name}</span>
                   </motion.button>
                 ))}
@@ -646,8 +679,8 @@ export default function App() {
                   whileHover={{ scale: 1.05, borderStyle: 'solid', borderColor: '#3b82f6' }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
-                    setGatePurpose('addProfile');
-                    setShowParentGate(true);
+                    playUISound('select');
+                    setShowAddProfile(true);
                   }}
                   className="flex flex-col items-center justify-center gap-4 p-6 sm:p-10 bg-white dark:bg-slate-800 border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[32px] sm:rounded-[40px] text-slate-300 dark:text-slate-600 hover:text-blue-400 dark:hover:text-blue-400 transition-all hover:shadow-lg w-36 sm:w-56"
                 >
@@ -949,11 +982,7 @@ export default function App() {
         isOpen={showParentGate}
         onSuccess={() => {
           setShowParentGate(false);
-          if (gatePurpose === 'settings') {
-            setShowDashboard(true);
-          } else {
-            setShowAddProfile(true);
-          }
+          setShowDashboard(true);
         }}
         onCancel={() => setShowParentGate(false)}
       />
