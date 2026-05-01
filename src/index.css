@@ -5,7 +5,30 @@
 
 @theme {
   --font-sans: "Fredoka", ui-sans-serif, system-ui, sans-serif;
-  --color-slate-50: #f8fafc;
+
+  /* ── Warm Parchment (main backgrounds) ── */
+  --color-parchment-50:  #FFF8EE;
+  --color-parchment-100: #FEF0D9;
+  --color-parchment-200: #FDE8C4;
+
+  /* ── Bible Gold (treasure / glory) ── */
+  --color-gold-300: #FCD34D;
+  --color-gold-400: #FBBF24;
+  --color-gold-500: #D97706;
+  --color-gold-600: #B45309;
+
+  /* ── Sky Faith (peaceful, trustworthy) ── */
+  --color-sky-400: #60A5FA;
+  --color-sky-500: #3B82F6;
+  --color-sky-600: #2563EB;
+
+  /* ── Praise Green (success & life) ── */
+  --color-praise-400: #34D399;
+  --color-praise-500: #10B981;
+  --color-praise-600: #059669;
+
+  /* Keep slate scale for dark mode surfaces */
+  --color-slate-50:  #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
   --color-slate-400: #94a3b8;
@@ -15,12 +38,22 @@
 
 @layer base {
   body {
-    @apply antialiased text-slate-800 bg-[#fdfbfb];
-    background-image: radial-gradient(circle at top center, #ffffff 0%, #f0f4f8 100%);
+    @apply antialiased text-slate-800;
+    background-color: var(--color-parchment-50);
+    background-image: radial-gradient(ellipse at top, #FFF8EE 0%, #FEF0D9 100%);
     background-attachment: fixed;
   }
   html.dark body {
     @apply text-slate-200 bg-slate-900;
-    background-image: radial-gradient(circle at top center, #1e293b 0%, #0f172a 100%);
+    background-image: radial-gradient(ellipse at top, #1e293b 0%, #0f172a 100%);
+  }
+}
+
+/* Smooth focus rings */
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--color-sky-500);
+    outline-offset: 2px;
+    border-radius: 8px;
   }
 }

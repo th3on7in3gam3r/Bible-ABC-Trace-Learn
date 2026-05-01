@@ -175,7 +175,7 @@ export default function LetterTracer({
         ))}
       </div>
 
-      <div className="relative w-full aspect-square bg-white dark:bg-slate-900 rounded-[32px] sm:rounded-[40px] border-4 sm:border-8 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center overflow-hidden cursor-crosshair transition-colors">
+      <div className="relative w-full aspect-square bg-parchment-50 dark:bg-slate-900 rounded-[32px] sm:rounded-[40px] border-4 sm:border-8 border-dashed border-parchment-200 dark:border-slate-800 flex flex-col items-center justify-center overflow-hidden cursor-crosshair transition-colors">
         <div className="absolute inset-0 pointer-events-none z-0">
           {targetPointsState.map((pt, i) => (
             <motion.div
@@ -183,9 +183,9 @@ export default function LetterTracer({
               initial={false}
               animate={{
                 scale: pt.hit ? [1, 1.2, 1.1] : [1, 1.3, 1],
-                opacity: pt.hit ? 0.7 : [0.2, 0.4, 0.2],
-                backgroundColor: pt.hit ? '#3b82f6' : ['#64748b', '#94a3b8', '#64748b'],
-                boxShadow: pt.hit ? '0 0 12px rgba(59, 130, 246, 0.6)' : 'none',
+                opacity: pt.hit ? 0 : [0.2, 0.45, 0.2],
+                backgroundColor: pt.hit ? '#D97706' : ['#d4a96a', '#e8c99a', '#d4a96a'],
+                boxShadow: pt.hit ? '0 0 10px rgba(217,119,6,0.5)' : 'none',
               }}
               transition={{
                 scale: {
@@ -232,7 +232,7 @@ export default function LetterTracer({
                   top: `${(p.y / 500) * 100}%`,
                   width: '8px',
                   height: '8px',
-                  backgroundColor: '#60a5fa',
+                  backgroundColor: '#FBBF24',
                   borderRadius: '2px',
                   transform: 'translate(-50%, -50%)',
                 }}
@@ -260,10 +260,10 @@ export default function LetterTracer({
           )}
         </div>
 
-        <div className="absolute top-2 sm:top-4 bg-white dark:bg-slate-900 px-3 sm:px-4 text-slate-300 dark:text-slate-600 font-black text-[10px] sm:text-xs uppercase tracking-[0.2em] z-10 flex items-center gap-2 transition-colors">
+        <div className="absolute top-2 sm:top-4 bg-parchment-50 dark:bg-slate-900 px-3 sm:px-4 text-parchment-200 dark:text-slate-600 font-black text-[10px] sm:text-xs uppercase tracking-[0.2em] z-10 flex items-center gap-2 transition-colors">
           Trace the Letter
           {coverage > 0 && (
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-white ${isReady ? 'bg-green-500' : 'bg-blue-400'}`}>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-white ${isReady ? 'bg-praise-500' : 'bg-sky-500'}`}>
               {Math.round(coverage)}%
             </span>
           )}
@@ -292,8 +292,8 @@ export default function LetterTracer({
         {coverage > 0 && (
           <div className="absolute bottom-4 right-4 w-12 h-12 pointer-events-none">
             <svg className="w-full h-full transform -rotate-90">
-              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-slate-100 dark:text-slate-800" />
-              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray="125.6" strokeDashoffset={125.6 - (125.6 * coverage) / 100} className={`${isReady ? 'text-green-500' : 'text-blue-500'} transition-all duration-300`} />
+              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-parchment-200 dark:text-slate-800" />
+              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray="125.6" strokeDashoffset={125.6 - (125.6 * coverage) / 100} className={`${isReady ? 'text-praise-500' : 'text-sky-500'} transition-all duration-300`} />
             </svg>
           </div>
         )}
@@ -331,13 +331,13 @@ export default function LetterTracer({
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={redo} disabled={false} className="w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700" title="Redo">
             <Redo2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
           </motion.button>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const text = `${letter.toUpperCase()}... ${word}... ${verse}`; const utterance = new SpeechSynthesisUtterance(text); utterance.rate = 0.75; utterance.pitch = 1.2; utterance.volume = soundVolume; window.speechSynthesis.speak(utterance);} }} className="w-16 sm:w-20 bg-blue-50 dark:bg-blue-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-800 transition-all shrink-0" title="Read aloud">
-            <Volume2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 dark:text-blue-500" />
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const text = `${letter.toUpperCase()}... ${word}... ${verse}`; const utterance = new SpeechSynthesisUtterance(text); utterance.rate = 0.75; utterance.pitch = 1.2; utterance.volume = soundVolume; window.speechSynthesis.speak(utterance);} }} className="w-16 sm:w-20 bg-sky-500/10 dark:bg-sky-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-800 transition-all shrink-0" title="Read aloud">
+            <Volume2 className="w-5 h-5 sm:w-6 sm:h-6 text-sky-500 dark:text-sky-400" />
           </motion.button>
         </div>
 
-        <motion.button whileHover={isReady ? { scale: 1.02, y: -2 } : {}} whileTap={isReady ? { scale: 0.98, y: 0 } : {}} onClick={() => { if (isReady && !isFinished) { setIsFinished(true); playSoundEffect('magic'); onComplete(); } }} className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg transition-all ${isReady ? 'bg-green-500 text-white border-green-700 shadow-green-200 dark:shadow-none' : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'}`}>
-          <span className="font-black text-sm sm:text-xl uppercase tracking-widest mr-2 sm:mr-4">{isReady ? 'Finish' : 'Keep Tracing!'}</span>
+        <motion.button whileHover={isReady ? { scale: 1.02, y: -2 } : {}} whileTap={isReady ? { scale: 0.98, y: 0 } : {}} onClick={() => { if (isReady && !isFinished) { setIsFinished(true); playSoundEffect('magic'); onComplete(); } }} className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg transition-all ${isReady ? 'bg-praise-500 text-white border-praise-600 shadow-praise-200/50 dark:shadow-none' : 'bg-parchment-100 dark:bg-slate-800 text-parchment-200 dark:text-slate-600 border-parchment-200 dark:border-slate-700 cursor-not-allowed opacity-60'}`}>
+          <span className="font-black text-sm sm:text-xl uppercase tracking-widest mr-2 sm:mr-4">{isReady ? 'Finish ✓' : 'Keep Tracing!'}</span>
           <Check className={`w-6 h-6 sm:w-8 sm:h-8 stroke-[4] ${isReady ? 'animate-bounce' : ''}`} />
         </motion.button>
       </div>

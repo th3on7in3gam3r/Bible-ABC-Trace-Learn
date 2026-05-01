@@ -6,13 +6,9 @@
 import {useState, useEffect, useMemo, useRef, useCallback} from 'react';
 import {motion, AnimatePresence} from 'motion/react';
 import {
-  Heart, 
-  Settings, 
-  ChevronLeft, 
-  Music, 
-  Volume2, 
-  VolumeX, 
-  Trophy,
+  Heart,
+  Settings,
+  ChevronLeft,
   User,
   Gift,
   Cross,
@@ -20,8 +16,6 @@ import {
   Moon,
   Cloud,
   Timer,
-  Bell,
-  Sparkle,
   Zap,
   Flame,
   CloudRain,
@@ -52,10 +46,11 @@ import {
   Play,
   Bird,
   Baby,
-  Music2,
+  Music,
+  Bell,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import {DEFAULT_ALPHABET, UserProfile, AppSettings, AlphabetItem, DifficultyLevel} from './types';
+import {DEFAULT_ALPHABET, UserProfile, AppSettings, DifficultyLevel} from './types';
 import LetterTracer from './components/LetterTracer';
 import SentenceTracer from './components/SentenceTracer';
 import CelebrationOverlay from './components/CelebrationOverlay';
@@ -108,22 +103,6 @@ const ICONS: Record<string, any> = {
   rabbit: Rabbit,
 };
 
-const BADGES = [
-  { id: 'explorer', name: 'Explorer', icon: 'sparkle', color: 'bg-green-400', description: 'Started the journey!' },
-  { id: 'star-gazer', name: 'Star Gazer', icon: 'star', color: 'bg-cyan-400', description: 'Earned 100 points' },
-  { id: 'scholar', name: 'Scholar', icon: 'zap', color: 'bg-blue-400', description: 'Traced 10 letters' },
-  { id: 'faithful', name: 'Faithful', icon: 'heart', color: 'bg-red-400', description: 'Earned 500 points' },
-  { id: 'alpha-pro', name: 'Alpha Pro', icon: 'flame', color: 'bg-purple-500', description: 'Earned 1000 points' },
-  { id: 'master', name: 'Master', icon: 'crown', color: 'bg-yellow-400', description: 'Completed everything!' },
-];
-
-// Emoji avatars used by the new AddProfileModal (format: "emojiId|bgColor")
-const EMOJI_AVATARS: Record<string, string> = {
-  sheep: '🐑', lion: '🦁', dove: '🕊️', fish: '🐟',
-  star: '⭐', rainbow: '🌈', sun: '☀️', heart: '❤️',
-  angel: '😇', crown: '👑', butterfly: '🦋', turtle: '🐢',
-};
-
 export default function App() {
   // --- State ---
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
@@ -158,13 +137,13 @@ export default function App() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [showColoringPage, setShowColoringPage] = useState(false);
   const [rewardToast, setRewardToast] = useState<string | null>(null);
-  const [gatePurpose, setGatePurpose] = useState<'settings' | 'addProfile'>('settings');
-  const [screenTimeRemaining, setScreenTimeRemaining] = useState<number | null>(null);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
+  const [showTimeUp, setShowTimeUp] = useState(false);
 
   const screenTimeStartRef = useRef<number>(Date.now());
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
+  const [screenTimeRemaining, setScreenTimeRemaining] = useState<number | null>(null);
 
   // --- Derived ---
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -236,11 +215,9 @@ export default function App() {
       if (remaining <= 5 * 60 * 1000 && remaining > 0) {
         setShowTimeWarning(true);
       } else if (remaining === 0) {
-        // Enforce limit - maybe switch to a locked screen
         setActiveProfileId(null);
-        setGatePurpose('settings');
         setShowParentGate(true);
-        alert("Time is up for today! Let's take a break.");
+        setShowTimeUp(true);
       }
     }, 1000);
 
@@ -517,33 +494,65 @@ export default function App() {
   // --- Views ---
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 select-none overflow-x-hidden flex flex-col pb-20 sm:pb-0 transition-colors duration-300">
+    <div className="min-h-screen bg-parchment-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 select-none overflow-x-hidden flex flex-col pb-20 sm:pb-0 transition-colors duration-300">
       {/* --- Screen Time Warning --- */}
       <AnimatePresence>
         {showTimeWarning && screenTimeRemaining !== null && (
-          <motion.div 
+          <motion.div
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 20, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
             className="fixed top-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4"
           >
-            <div className="bg-amber-100 dark:bg-amber-900/40 border-2 border-amber-200 dark:border-amber-700 p-4 rounded-3xl shadow-2xl flex items-center gap-4">
-              <div className="bg-amber-400 p-2 rounded-2xl text-white">
+            <div className="bg-parchment-100 dark:bg-amber-900/40 border-2 border-gold-300 dark:border-amber-700 p-4 rounded-3xl shadow-2xl flex items-center gap-4">
+              <div className="bg-gold-400 p-2 rounded-2xl text-white shrink-0">
                 <Timer className="w-6 h-6 animate-pulse" />
               </div>
               <div className="flex-1">
-                <p className="text-xs font-black text-amber-900 dark:text-amber-100 uppercase tracking-widest">Time for a break soon!</p>
-                <p className="text-[10px] text-amber-700 dark:text-amber-300 font-bold">
+                <p className="text-xs font-black text-gold-700 dark:text-amber-100 uppercase tracking-widest">Time for a break soon!</p>
+                <p className="text-[10px] text-gold-600 dark:text-amber-300 font-bold">
                   {Math.floor(screenTimeRemaining / 60)}:{(screenTimeRemaining % 60).toString().padStart(2, '0')} remaining
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowTimeWarning(false)}
-                className="p-1 hover:bg-amber-200 dark:hover:bg-amber-800 rounded-lg transition-colors"
+                className="p-1 hover:bg-gold-200 dark:hover:bg-amber-800 rounded-lg transition-colors"
               >
-                <ChevronLeft className="w-4 h-4 rotate-90" />
+                <ChevronLeft className="w-4 h-4 rotate-90 text-gold-600" />
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- Time's Up Modal --- */}
+      <AnimatePresence>
+        {showTimeUp && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.85, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.85, y: 20 }}
+              transition={{ type: 'spring', bounce: 0.3 }}
+              className="bg-parchment-50 dark:bg-slate-900 rounded-[40px] w-full max-w-sm p-10 text-center shadow-2xl border-4 border-gold-300 dark:border-gold-700"
+            >
+              <div className="text-6xl mb-4">⏰</div>
+              <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Time for a Break!</h2>
+              <p className="text-slate-500 dark:text-slate-400 font-bold text-sm mb-6">
+                "Be still, and know that I am God." — Psalm 46:10
+              </p>
+              <button
+                onClick={() => setShowTimeUp(false)}
+                className="w-full py-4 rounded-2xl bg-gold-500 text-white font-black uppercase tracking-widest hover:bg-gold-600 transition-all shadow-lg"
+              >
+                OK, I'll Rest 🌿
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -558,7 +567,6 @@ export default function App() {
         onToggleDarkMode={() => setSettings({ ...settings, darkMode: !settings.darkMode })}
         onOpenParentGate={() => {
           playUISound('click');
-          setGatePurpose('settings');
           setShowParentGate(true);
         }}
       />
@@ -570,7 +578,7 @@ export default function App() {
             initial={{ opacity: 0, y: -24, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -24, scale: 0.95 }}
-            className="fixed top-28 left-1/2 z-50 -translate-x-1/2 rounded-3xl border-2 border-blue-200 bg-blue-50 dark:bg-slate-800 dark:border-blue-900 px-6 py-4 shadow-2xl shadow-blue-100/80 dark:shadow-black/20 text-slate-900 dark:text-slate-100"
+            className="fixed top-28 left-1/2 z-50 -translate-x-1/2 rounded-3xl border-2 border-gold-300 bg-parchment-100 dark:bg-slate-800 dark:border-gold-700 px-6 py-4 shadow-2xl shadow-gold-200/60 dark:shadow-black/20 text-slate-900 dark:text-slate-100"
           >
             <p className="font-black text-sm sm:text-base text-center">{rewardToast}</p>
           </motion.div>
@@ -588,9 +596,10 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 gap-8 md:gap-12"
             >
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-3">
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-gold-500">✦ Bible ABC Trace ✦</p>
                 <h2 className="text-4xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Who is learning?</h2>
-                <div className="h-1.5 w-24 bg-blue-500 mx-auto rounded-full" />
+                <div className="h-1.5 w-24 bg-gold-400 mx-auto rounded-full" />
               </div>
               <motion.div 
                 variants={{
@@ -619,7 +628,7 @@ export default function App() {
                       playUISound('select');
                       setActiveProfileId(p.id);
                     }}
-                    className="flex flex-col items-center gap-4 sm:gap-6 p-6 sm:p-10 bg-slate-50 dark:bg-slate-800 rounded-[32px] sm:rounded-[40px] border-4 border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-white dark:hover:bg-slate-700 transition-all shadow-sm hover:shadow-xl w-36 sm:w-56"
+                    className="flex flex-col items-center gap-4 sm:gap-6 p-6 sm:p-10 bg-white dark:bg-slate-800 rounded-[32px] sm:rounded-[40px] border-4 border-parchment-100 dark:border-slate-700 hover:border-gold-400 dark:hover:border-gold-500 hover:bg-parchment-50 dark:hover:bg-slate-700 transition-all shadow-sm hover:shadow-xl w-36 sm:w-56"
                   >
                     <AvatarCircle avatar={p.avatar} size="lg" />
                     <span className="text-lg sm:text-2xl font-bold truncate w-full text-center dark:text-white">{p.name}</span>
@@ -636,7 +645,7 @@ export default function App() {
                     playUISound('select');
                     setShowAddProfile(true);
                   }}
-                  className="flex flex-col items-center justify-center gap-4 p-6 sm:p-10 bg-white dark:bg-slate-800 border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[32px] sm:rounded-[40px] text-slate-300 dark:text-slate-600 hover:text-blue-400 dark:hover:text-blue-400 transition-all hover:shadow-lg w-36 sm:w-56"
+                  className="flex flex-col items-center justify-center gap-4 p-6 sm:p-10 bg-white dark:bg-slate-800 border-4 border-dashed border-parchment-200 dark:border-slate-700 rounded-[32px] sm:rounded-[40px] text-parchment-200 dark:text-slate-600 hover:text-gold-400 dark:hover:text-gold-400 transition-all hover:shadow-lg w-36 sm:w-56"
                 >
                   <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full border-4 border-dashed flex items-center justify-center">
                     <UserPlusIcon />
@@ -661,13 +670,13 @@ export default function App() {
                     <div className="flex-1 max-w-xs mx-auto sm:mx-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mastery</span>
-                        <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{completionPercentage}%</span>
+                        <span className="text-[10px] font-black text-gold-500 uppercase tracking-widest">{completionPercentage}%</span>
                       </div>
-                      <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border-2 border-slate-50 dark:border-slate-800">
+                      <div className="h-3 w-full bg-parchment-100 dark:bg-slate-800 rounded-full overflow-hidden border-2 border-parchment-200 dark:border-slate-700">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${completionPercentage}%` }}
-                          className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
+                          className="h-full bg-gradient-to-r from-gold-400 to-gold-500 rounded-full"
                           transition={{ type: "spring", bounce: 0, duration: 1.5 }}
                         />
                       </div>
@@ -678,9 +687,9 @@ export default function App() {
                 <div className="flex gap-3 sm:gap-4 justify-center">
 
 
-                  <div className="bg-slate-50 dark:bg-slate-800 px-4 sm:px-6 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-slate-100 dark:border-slate-700 flex items-center gap-2 sm:gap-4">
+                  <div className="bg-parchment-100 dark:bg-slate-800 px-4 sm:px-6 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-parchment-200 dark:border-slate-700 flex items-center gap-2 sm:gap-4">
                      <span className="text-xl sm:text-2xl">⭐</span>
-                     <span className="text-xl sm:text-2xl font-black dark:text-white">{activeProfile.points}</span>
+                     <span className="text-xl sm:text-2xl font-black text-gold-600 dark:text-gold-400">{activeProfile.points}</span>
                   </div>
                   <button 
                     onClick={() => setActiveProfileId(null)}
@@ -725,9 +734,13 @@ export default function App() {
                         playUISound('click');
                         setCurrentLetterIdx(idx);
                       }}
-                      className={`relative aspect-square flex flex-col items-center justify-center p-3 sm:p-6 bg-white dark:bg-slate-800 rounded-2xl sm:rounded-[40px] border-2 sm:border-4 transition-all shadow-sm ${isDone ? 'border-green-400 bg-green-50/30 dark:bg-green-900/10' : 'border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl'}`}
+                      className={`relative aspect-square flex flex-col items-center justify-center p-3 sm:p-6 rounded-2xl sm:rounded-[32px] border-2 sm:border-4 transition-all shadow-sm ${
+                        isDone
+                          ? 'border-praise-400 bg-praise-400/10 dark:bg-praise-400/5'
+                          : 'bg-white dark:bg-slate-800 border-parchment-200 dark:border-slate-700 hover:border-gold-400 dark:hover:border-gold-500 hover:shadow-xl hover:bg-parchment-50 dark:hover:bg-slate-700'
+                      }`}
                     >
-                      <span className={`text-2xl sm:text-4xl md:text-5xl font-black mb-1 sm:mb-2 ${isDone ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-white'}`}>{item.letter}</span>
+                      <span className={`text-2xl sm:text-4xl md:text-5xl font-black mb-1 sm:mb-2 ${isDone ? 'text-praise-600 dark:text-praise-400' : 'text-slate-800 dark:text-white'}`}>{item.letter}</span>
                       <motion.div
                         animate={{ 
                           y: [0, -4, 0],
@@ -738,14 +751,14 @@ export default function App() {
                           ease: "easeInOut"
                         }}
                       >
-                        <IconComp className={`w-5 h-5 sm:w-8 h-8 ${isDone ? 'text-green-500' : 'text-slate-300 dark:text-slate-600'}`} />
+                        <IconComp className={`w-5 h-5 sm:w-8 sm:h-8 ${isDone ? 'text-praise-500' : 'text-parchment-200 dark:text-slate-600'}`} />
                       </motion.div>
                       
                       {isDone && (
                         <motion.div 
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
-                          className="absolute -top-1.5 -right-1.5 sm:-top-3 sm:-right-3 bg-green-500 text-white rounded-full p-1 sm:p-2 shadow-lg ring-2 sm:ring-4 ring-white dark:ring-slate-800"
+                          className="absolute -top-1.5 -right-1.5 sm:-top-3 sm:-right-3 bg-praise-500 text-white rounded-full p-1 sm:p-2 shadow-lg ring-2 sm:ring-4 ring-white dark:ring-slate-800"
                         >
                           <CheckCircle className="w-3 h-3 sm:w-5 h-5" />
                         </motion.div>
@@ -766,16 +779,16 @@ export default function App() {
             >
               {/* Illustration & Verse (Top on Mobile, Right on Desktop) */}
               <div className="w-full lg:w-1/2 flex flex-col items-center justify-center gap-6 lg:gap-12 order-2 lg:order-2">
-                <div className="w-full max-w-md lg:max-w-none aspect-[4/3] border-4 lg:border-8 border-slate-800 dark:border-slate-700 rounded-[32px] lg:rounded-[60px] p-6 lg:p-12 flex flex-col items-center justify-center relative bg-white dark:bg-slate-900 group hover:scale-[1.02] transition-all shadow-xl lg:shadow-2xl">
+                <div className="w-full max-w-md lg:max-w-none aspect-[4/3] border-4 lg:border-8 border-gold-400 dark:border-gold-600 rounded-[32px] lg:rounded-[60px] p-6 lg:p-12 flex flex-col items-center justify-center relative bg-parchment-50 dark:bg-slate-900 group hover:scale-[1.02] transition-all shadow-xl lg:shadow-2xl shadow-gold-400/20">
                   {/* Big Visual Header */}
-                  <div className="absolute -top-4 lg:-top-6 bg-slate-800 dark:bg-slate-700 text-white px-4 lg:px-8 py-2 lg:py-3 rounded-full font-black text-sm lg:text-2xl uppercase tracking-widest shadow-xl whitespace-nowrap">
+                  <div className="absolute -top-4 lg:-top-6 bg-gradient-to-r from-gold-500 to-gold-600 text-white px-4 lg:px-8 py-2 lg:py-3 rounded-full font-black text-sm lg:text-2xl uppercase tracking-widest shadow-xl whitespace-nowrap">
                     {alphabet[currentLetterIdx].letter} is for {alphabet[currentLetterIdx].word}
                   </div>
                   
                   <div className="flex flex-col items-center gap-4 lg:gap-8">
                     {(() => {
                       const IconComp = ICONS[alphabet[currentLetterIdx].illustration] || Star;
-                      return <IconComp className="w-32 h-32 lg:w-48 lg:h-48 text-slate-800 dark:text-white" strokeWidth={1} />;
+                      return <IconComp className="w-32 h-32 lg:w-48 lg:h-48 text-gold-500 dark:text-gold-400" strokeWidth={1} />;
                     })()}
                   </div>
                 </div>
@@ -798,7 +811,7 @@ export default function App() {
                     className="space-y-1 lg:space-y-2"
                   >
                     <p className="text-xl lg:text-3xl font-medium text-slate-600 dark:text-slate-300 italic leading-snug px-4">"{alphabet[currentLetterIdx].verse}"</p>
-                    <p className="text-blue-500 font-black text-[10px] lg:text-xs uppercase tracking-[0.3em]">{alphabet[currentLetterIdx].reference}</p>
+                    <p className="text-gold-500 font-black text-[10px] lg:text-xs uppercase tracking-[0.3em]">{alphabet[currentLetterIdx].reference}</p>
                   </motion.div>
 
                   <div className="flex items-center justify-center gap-3 lg:gap-4">
