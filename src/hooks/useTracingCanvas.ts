@@ -3,9 +3,7 @@ import { TRACE_CONFIG } from '../types';
 import type { DifficultyLevel, TracingPoint, TracingParticle } from '../types';
 
 type PointerPosition = { x: number; y: number };
-
 type CanvasPointerEvent = PointerEvent<HTMLCanvasElement>;
-
 type SoundEffectType = 'start' | 'success' | 'magic';
 
 interface UseTracingCanvasArgs {
@@ -47,23 +45,31 @@ export function useTracingCanvas({
   onCoverageChange,
 }: UseTracingCanvasArgs): UseTracingCanvasResult {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // All mutable drawing state lives in refs — no re-renders during active drawing
+  const isDrawingRef = useRef(false);
+  const hasStartedRef = useRef(false);
+  const lastPosRef = useRef<PointerPosition | null>(null);
+  const currentStrokeRef = useRef<PointerPosition[]>([]);
+  const strokesRef = useRef<PointerPosition[][]>([]);
+  const redoStackRef = useRef<PointerPosition[][]>([]);
+  const targetPointsRef = useRef<TracingPoint[]>([]);
+  const coverageRef = useRef(0);
+  const hasPlayedSuccessRef = useRef(false);
+  const particleIdRef = useRef(0);
+
+  // React state — only updated when we need a UI re-render
   const [isDrawing, setIsDrawing] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
   const [coverage, setCoverage] = useState(0);
   const [targetPointsState, setTargetPointsState] = useState<TracingPoint[]>([]);
   const [particles, setParticles] = useState<TracingParticle[]>([]);
-  const [strokes, setStrokes] = useState<PointerPosition[][]>([]);
-  const [redoStack, setRedoStack] = useState<PointerPosition[][]>([]);
   const [cursorPos, setCursorPos] = useState<PointerPosition | null>(null);
-  const [hasPlayedSuccess, setHasPlayedSuccess] = useState(false);
-  const currentStrokeRef = useRef<PointerPosition[]>([]);
-  const lastPosRef = useRef<PointerPosition | null>(null);
-  const isDrawingRef = useRef(false);
-  const particleIdRef = useRef(0);
+  const [strokeVersion, setStrokeVersion] = useState(0); // bumped only on undo/redo/reset
 
   const config = TRACE_CONFIG[difficulty];
 
-  const playSoundEffect = useCallback((type: 'start' | 'success' | 'magic') => {
+  // ─── Sound ───────────────────────────────────────────────────────────────
+  const playSoundEffect = useCallback((type: SoundEffectType) => {
     if (!soundEnabled || soundVolume <= 0) return;
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -71,29 +77,24 @@ export function useTracingCanvas({
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-
       osc.connect(gain);
       gain.connect(ctx.destination);
-
       const now = ctx.currentTime;
       gain.gain.setValueAtTime(0, now);
-
       if (type === 'start') {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(600, now);
         osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
         gain.gain.linearRampToValueAtTime(soundVolume, now + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
       } else if (type === 'success') {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.setValueAtTime(600, now + 0.05);
         gain.gain.linearRampToValueAtTime(soundVolume, now + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
       } else if (type === 'magic') {
         osc.type = 'square';
         osc.frequency.setValueAtTime(400, now);
@@ -101,79 +102,67 @@ export function useTracingCanvas({
         osc.frequency.setValueAtTime(600, now + 0.2);
         gain.gain.linearRampToValueAtTime(soundVolume * 0.5, now + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.4);
+        osc.start(now); osc.stop(now + 0.4);
       }
     } catch (e) {
       console.error('Audio playback failed', e);
     }
-  }, [soundVolume]);
+  }, [soundEnabled, soundVolume]);
 
+  // ─── Particles ───────────────────────────────────────────────────────────
   const addParticle = useCallback((x: number, y: number) => {
     const id = particleIdRef.current++;
-    setParticles(prev => [...prev.slice(-15), { id, x, y }]);
-    setTimeout(() => {
-      setParticles(prev => prev.filter(p => p.id !== id));
-    }, 1000);
+    setParticles(prev => [...prev.slice(-20), { id, x, y }]);
+    setTimeout(() => setParticles(prev => prev.filter(p => p.id !== id)), 900);
   }, []);
 
-  const pointSegmentDistanceSq = useCallback((pt: TracingPoint, a: { x: number; y: number }, b: { x: number; y: number }) => {
+  // ─── Point-segment distance (for coverage) ───────────────────────────────
+  const pointSegmentDistanceSq = useCallback((
+    pt: TracingPoint,
+    a: PointerPosition,
+    b: PointerPosition,
+  ): number => {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     if (dx === 0 && dy === 0) {
-      const px = pt.x - a.x;
-      const py = pt.y - a.y;
-      return px * px + py * py;
+      return (pt.x - a.x) ** 2 + (pt.y - a.y) ** 2;
     }
-
     const t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy)));
-    const projX = a.x + t * dx;
-    const projY = a.y + t * dy;
-    const px = pt.x - projX;
-    const py = pt.y - projY;
-    return px * px + py * py;
+    return (pt.x - (a.x + t * dx)) ** 2 + (pt.y - (a.y + t * dy)) ** 2;
   }, []);
 
-  const markPointsAlongSegment = useCallback((from: { x: number; y: number }, to: { x: number; y: number }) => {
+  // ─── Hit-test a segment against target points (mutates ref, no setState) ─
+  const hitTestSegment = useCallback((from: PointerPosition, to: PointerPosition) => {
     const radiusSq = config.radius * config.radius;
-    let hitCount = 0;
-
-    setTargetPointsState(prev => {
-      const next = prev.map(pt => {
-        if (pt.hit) {
-          hitCount += 1;
-          return pt;
-        }
-        const distanceSq = pointSegmentDistanceSq(pt, from, to);
-        if (distanceSq <= radiusSq) {
-          hitCount += 1;
-          return { ...pt, hit: true };
-        }
-        return pt;
-      });
-
-      const nextCoverage = next.length > 0 ? (hitCount / next.length) * 100 : 0;
-      setCoverage(nextCoverage);
-      onCoverageChange?.(nextCoverage);
-      return next;
-    });
-  }, [config.radius, onCoverageChange, pointSegmentDistanceSq]);
-
-  const updateCoverage = useCallback((x: number, y: number) => {
-    const pos = { x, y };
-    const prev = lastPosRef.current;
-    if (prev) {
-      markPointsAlongSegment(prev, pos);
-    } else {
-      markPointsAlongSegment(pos, pos);
+    let changed = false;
+    const pts = targetPointsRef.current;
+    for (let i = 0; i < pts.length; i++) {
+      if (!pts[i].hit && pointSegmentDistanceSq(pts[i], from, to) <= radiusSq) {
+        pts[i] = { ...pts[i], hit: true };
+        changed = true;
+      }
     }
+    if (changed) {
+      const hitCount = pts.filter(p => p.hit).length;
+      const newCoverage = pts.length > 0 ? (hitCount / pts.length) * 100 : 0;
+      coverageRef.current = newCoverage;
+      setCoverage(newCoverage);
+      onCoverageChange?.(newCoverage);
+      // Sync React state for dot overlay (throttled — only when something changed)
+      setTargetPointsState([...pts]);
 
-    if (isDrawingRef.current) {
-      addParticle(x, y);
+      // Fire ready callback once
+      const isReady = newCoverage >= config.threshold;
+      if (isReady && !hasPlayedSuccessRef.current) {
+        hasPlayedSuccessRef.current = true;
+        playSoundEffect('success');
+        onReadyChange?.(true);
+      }
     }
-  }, [addParticle, markPointsAlongSegment]);
+  }, [config.radius, config.threshold, onCoverageChange, onReadyChange, playSoundEffect, pointSegmentDistanceSq]);
 
-  const getPos = useCallback((e: CanvasPointerEvent) => {
+  // ─── Canvas helpers ───────────────────────────────────────────────────────
+  const getPos = useCallback((e: CanvasPointerEvent): PointerPosition => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
@@ -183,172 +172,217 @@ export function useTracingCanvas({
     };
   }, []);
 
-  const redrawFromStrokes = useCallback(() => {
+  const applyStrokeStyle = useCallback((ctx: CanvasRenderingContext2D) => {
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = config.lineWidth;
+    ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = darkMode ? 'rgba(96,165,250,0.45)' : 'rgba(59,130,246,0.5)';
+  }, [config.lineWidth, darkMode]);
+
+  // ─── Full redraw (used only for undo/redo/reset) ──────────────────────────
+  const fullRedraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
-
-    let hitCount = 0;
-    const nextPoints = targetPointsState.map(pt => ({ ...pt, hit: false }));
+    // Recompute coverage from scratch
+    const pts = targetPointsRef.current.map(p => ({ ...p, hit: false }));
+    const strokes = strokesRef.current;
 
     strokes.forEach(stroke => {
-      for (let i = 1; i < stroke.length; i += 1) {
-        const from = stroke[i - 1];
-        const to = stroke[i];
-        nextPoints.forEach((pt, index) => {
-          if (!pt.hit && pointSegmentDistanceSq(pt, from, to) <= config.radius * config.radius) {
-            nextPoints[index] = { ...pt, hit: true };
+      for (let i = 1; i < stroke.length; i++) {
+        const radiusSq = config.radius * config.radius;
+        for (let j = 0; j < pts.length; j++) {
+          if (!pts[j].hit && pointSegmentDistanceSq(pts[j], stroke[i - 1], stroke[i]) <= radiusSq) {
+            pts[j] = { ...pts[j], hit: true };
           }
-        });
+        }
       }
     });
 
-    hitCount = nextPoints.filter(pt => pt.hit).length;
-    const nextCoverage = nextPoints.length > 0 ? (hitCount / nextPoints.length) * 100 : 0;
-    setTargetPointsState(nextPoints);
-    setCoverage(nextCoverage);
-    onCoverageChange?.(nextCoverage);
+    targetPointsRef.current = pts;
+    const hitCount = pts.filter(p => p.hit).length;
+    const newCoverage = pts.length > 0 ? (hitCount / pts.length) * 100 : 0;
+    coverageRef.current = newCoverage;
+    setCoverage(newCoverage);
+    setTargetPointsState([...pts]);
+    onCoverageChange?.(newCoverage);
 
-    renderTemplate(ctx, width, height, nextCoverage);
+    // Draw template (fades with coverage)
+    renderTemplate(ctx, canvas.width, canvas.height, newCoverage);
 
+    // Redraw all strokes on top
     strokes.forEach(stroke => {
-      if (stroke.length === 0) return;
+      if (stroke.length < 2) return;
       ctx.beginPath();
       ctx.moveTo(stroke[0].x, stroke[0].y);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = config.lineWidth;
-      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
-      stroke.forEach(pos => ctx.lineTo(pos.x, pos.y));
+      applyStrokeStyle(ctx);
+      for (let i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i].x, stroke[i].y);
       ctx.stroke();
+      ctx.shadowBlur = 0;
     });
-  }, [config.lineWidth, config.radius, darkMode, onCoverageChange, pointSegmentDistanceSq, renderTemplate, strokes, targetPointsState]);
+  }, [applyStrokeStyle, config.radius, onCoverageChange, pointSegmentDistanceSq, renderTemplate]);
 
+  // ─── Initialise canvas when template/points change ────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const width = canvas.width;
-    const height = canvas.height;
-    const points = generateTargetPoints(width, height);
-    setTargetPointsState(points);
-    setCoverage(0);
-    setHasPlayedSuccess(false);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    renderTemplate(ctx, width, height, 0);
+
+    const pts = generateTargetPoints(canvas.width, canvas.height);
+    targetPointsRef.current = pts;
+    coverageRef.current = 0;
+    hasPlayedSuccessRef.current = false;
+    strokesRef.current = [];
+    redoStackRef.current = [];
+    currentStrokeRef.current = [];
+    hasStartedRef.current = false;
+
+    setCoverage(0);
+    setTargetPointsState([...pts]);
+    setStrokeVersion(0);
+
+    renderTemplate(ctx, canvas.width, canvas.height, 0);
   }, [generateTargetPoints, renderTemplate]);
 
+  // ─── Full redraw triggered by undo/redo/reset ─────────────────────────────
   useEffect(() => {
-    redrawFromStrokes();
-  }, [redrawFromStrokes]);
+    if (strokeVersion > 0) fullRedraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strokeVersion]);
 
-  const isReady = coverage >= config.threshold;
-
-  useEffect(() => {
-    if (isReady && hasStarted && !hasPlayedSuccess) {
-      playSoundEffect('success');
-      setHasPlayedSuccess(true);
-      onReadyChange?.(true);
-    }
-  }, [isReady, hasStarted, hasPlayedSuccess, onReadyChange, playSoundEffect]);
-
+  // ─── Pointer events ───────────────────────────────────────────────────────
   const startDrawing = useCallback((e: CanvasPointerEvent) => {
+    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     const pos = getPos(e);
-    setIsDrawing(true);
+
     isDrawingRef.current = true;
+    setIsDrawing(true);
     setCursorPos(pos);
     currentStrokeRef.current = [pos];
     lastPosRef.current = pos;
-    if (!hasStarted) {
+
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true;
       playSoundEffect('start');
     }
-    setHasStarted(true);
-    updateCoverage(pos.x, pos.y);
 
+    // Hit-test the single point
+    hitTestSegment(pos, pos);
+
+    // Begin live canvas path
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx) {
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = config.lineWidth;
-      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
+      applyStrokeStyle(ctx);
     }
-  }, [config.lineWidth, darkMode, getPos, hasStarted, playSoundEffect, updateCoverage]);
+  }, [applyStrokeStyle, getPos, hitTestSegment, playSoundEffect]);
 
   const draw = useCallback((e: CanvasPointerEvent) => {
     if (!isDrawingRef.current) return;
     const pos = getPos(e);
+    const prev = lastPosRef.current ?? pos;
+
     setCursorPos(pos);
-    const previous = lastPosRef.current ?? pos;
     currentStrokeRef.current.push(pos);
     lastPosRef.current = pos;
-    markPointsAlongSegment(previous, pos);
-    if (isDrawingRef.current) {
-      addParticle(pos.x, pos.y);
-    }
+
+    // Hit-test the new segment
+    hitTestSegment(prev, pos);
+    addParticle(pos.x, pos.y);
+
+    // Draw the segment live — no clear, no redraw
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx) {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
+      // Keep path open for next segment
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      applyStrokeStyle(ctx);
     }
-  }, [addParticle, getPos, markPointsAlongSegment]);
+  }, [addParticle, applyStrokeStyle, getPos, hitTestSegment]);
 
   const endDrawing = useCallback(() => {
-    if (isDrawingRef.current && currentStrokeRef.current.length > 0) {
-      const completedStroke = [...currentStrokeRef.current];
-      setStrokes(prev => [...prev, completedStroke]);
-      setRedoStack([]);
+    if (!isDrawingRef.current) return;
+    if (currentStrokeRef.current.length > 0) {
+      strokesRef.current = [...strokesRef.current, [...currentStrokeRef.current]];
+      redoStackRef.current = [];
       currentStrokeRef.current = [];
     }
     isDrawingRef.current = false;
     setIsDrawing(false);
     setCursorPos(null);
     lastPosRef.current = null;
-  }, []);
 
-  const undo = useCallback(() => {
-    setStrokes(prev => {
-      if (prev.length === 0) return prev;
-      const last = prev[prev.length - 1];
-      setRedoStack(r => [...r, last]);
-      return prev.slice(0, -1);
+    // Redraw template with updated coverage so guide fades correctly
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const cov = coverageRef.current;
+    renderTemplate(ctx, canvas.width, canvas.height, cov);
+    // Redraw all strokes on top of the refreshed template
+    strokesRef.current.forEach(stroke => {
+      if (stroke.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x, stroke[0].y);
+      applyStrokeStyle(ctx);
+      for (let i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i].x, stroke[i].y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     });
+  }, [applyStrokeStyle, renderTemplate]);
+
+  // ─── Undo / Redo / Reset ─────────────────────────────────────────────────
+  const undo = useCallback(() => {
+    if (strokesRef.current.length === 0) return;
+    const last = strokesRef.current[strokesRef.current.length - 1];
+    redoStackRef.current = [...redoStackRef.current, last];
+    strokesRef.current = strokesRef.current.slice(0, -1);
+    hasPlayedSuccessRef.current = false;
+    setStrokeVersion(v => v + 1);
   }, []);
 
   const redo = useCallback(() => {
-    setRedoStack(prev => {
-      if (prev.length === 0) return prev;
-      const last = prev[prev.length - 1];
-      setStrokes(prevStrokes => [...prevStrokes, last]);
-      return prev.slice(0, -1);
-    });
+    if (redoStackRef.current.length === 0) return;
+    const last = redoStackRef.current[redoStackRef.current.length - 1];
+    strokesRef.current = [...strokesRef.current, last];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    setStrokeVersion(v => v + 1);
   }, []);
 
   const reset = useCallback(() => {
+    strokesRef.current = [];
+    redoStackRef.current = [];
     currentStrokeRef.current = [];
-    setStrokes([]);
-    setRedoStack([]);
+    isDrawingRef.current = false;
+    hasStartedRef.current = false;
+    hasPlayedSuccessRef.current = false;
+    lastPosRef.current = null;
+    coverageRef.current = 0;
+
+    // Reset all points to unhit
+    targetPointsRef.current = targetPointsRef.current.map(p => ({ ...p, hit: false }));
+
     setIsDrawing(false);
     setCursorPos(null);
-    setHasStarted(false);
-    setHasPlayedSuccess(false);
     setCoverage(0);
-    setTargetPointsState(prev => prev.map(pt => ({ ...pt, hit: false })));
+    setTargetPointsState([...targetPointsRef.current]);
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     renderTemplate(ctx, canvas.width, canvas.height, 0);
   }, [renderTemplate]);
+
+  const isReady = coverage >= config.threshold;
 
   return {
     canvasRef,
