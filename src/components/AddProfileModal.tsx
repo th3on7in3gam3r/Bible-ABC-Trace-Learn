@@ -5,10 +5,11 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { DifficultyLevel } from '../types';
 
 interface AddProfileModalProps {
   isOpen: boolean;
-  onAdd: (name: string, avatar: string, difficulty: 'easy' | 'medium' | 'hard') => void;
+  onAdd: (name: string, avatar: string, difficulty: DifficultyLevel) => void;
   onCancel: () => void;
 }
 

@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {useRef, useEffect, useState, useCallback} from 'react';
-import {motion, AnimatePresence} from 'motion/react';
-import {RotateCcw, Check, Volume2, Undo2, Redo2, Star} from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { RotateCcw, Check, Volume2, Undo2, Redo2, Star } from 'lucide-react';
+import { useTracingCanvas } from '../hooks/useTracingCanvas';
+import type { DifficultyLevel } from '../types';
 
 interface LetterTracerProps {
   letter: string;
@@ -15,8 +17,10 @@ interface LetterTracerProps {
   onComplete: () => void;
   voiceRecording?: string;
   onRecord: () => void;
-  difficulty?: 'easy' | 'medium' | 'hard';
+  difficulty?: DifficultyLevel;
   soundVolume?: number;
+  soundEnabled?: boolean;
+  voiceEnabled?: boolean;
   darkMode?: boolean;
 }
 
@@ -30,146 +34,29 @@ export default function LetterTracer({
   onRecord,
   difficulty = 'medium',
   soundVolume = 0.5,
+  soundEnabled = true,
+  voiceEnabled = true,
   darkMode = false,
 }: LetterTracerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [coverage, setCoverage] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [hasPlayedPhonetic, setHasPlayedPhonetic] = useState(false);
-  const [targetPointsState, setTargetPointsState] = useState<{x: number, y: number, hit: boolean}[]>([]);
-  const [particles, setParticles] = useState<{id: number, x: number, y: number}[]>([]);
-  const [strokes, setStrokes] = useState<{x: number, y: number}[][]>([]);
-  const [redoStack, setRedoStack] = useState<{x: number, y: number}[][]>([]);
-  const [cursorPos, setCursorPos] = useState<{x: number, y: number} | null>(null);
-  const currentStrokeRef = useRef<{x: number, y: number}[]>([]);
-  const particleIdRef = useRef(0);
-  // New: celebration banner + star accuracy
   const [showBanner, setShowBanner] = useState(false);
   const [stars, setStars] = useState(0);
   const [hasTriggeredCelebration, setHasTriggeredCelebration] = useState(false);
 
-  const DIFF_CONFIG = {
-    easy: { lineWidth: 36, radius: 45, threshold: 60, dotPulse: 3.5 },
-    medium: { lineWidth: 24, radius: 30, threshold: 75, dotPulse: 2.5 },
-    hard: { lineWidth: 16, radius: 20, threshold: 85, dotPulse: 1.5 },
-  };
-
-  const config = DIFF_CONFIG[difficulty];
-  
   const displayLetter = isUppercase ? letter.toUpperCase() : letter.toLowerCase();
 
-  const playSoundEffect = useCallback((type: 'start' | 'success' | 'magic') => {
-    try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      
-      const now = ctx.currentTime;
-      gain.gain.setValueAtTime(0, now);
-      
-      if (type === 'start') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
-        gain.gain.linearRampToValueAtTime(soundVolume, now + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-      } else if (type === 'success') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.setValueAtTime(600, now + 0.05);
-        gain.gain.linearRampToValueAtTime(soundVolume, now + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (type === 'magic') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.setValueAtTime(500, now + 0.1);
-        osc.frequency.setValueAtTime(600, now + 0.2);
-        gain.gain.linearRampToValueAtTime(soundVolume * 0.5, now + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.4);
-      }
-    } catch(e) {
-      console.error("Audio playback failed", e);
-    }
-  }, [soundVolume]);
-
-  const playPhoneticSound = useCallback(() => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-
-    // Full sentence: "B… Bless… Every good gift is a blessing from God."
-    const text = `${letter.toUpperCase()}... ${word}... ${verse}`;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.75;
-    utterance.pitch = 1.2;
-    utterance.volume = soundVolume;
-    window.speechSynthesis.speak(utterance);
-  }, [letter, word, verse, soundVolume]);
-
-  const calculateTargetPoints = useCallback(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 500;
-    canvas.height = 500;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.font = `bold ${canvas.height * 0.8}px "Inter", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(displayLetter, canvas.width / 2, canvas.height / 2 + canvas.height * 0.05);
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const points: {x: number, y: number, hit: boolean}[] = [];
-    const step = 25; // Slightly larger step for better performance and clear dots
-
-    for (let y = 0; y < canvas.height; y += step) {
-      for (let x = 0; x < canvas.width; x += step) {
-        const alpha = imageData[(y * canvas.width + x) * 4 + 3];
-        if (alpha > 50) {
-          points.push({ x, y, hit: false });
-        }
-      }
-    }
-    setTargetPointsState(points);
-    setCoverage(0);
-  }, [displayLetter]);
-
-  const drawTemplate = useCallback((currentCoverage = 0) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
+  const renderTemplate = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, currentCoverage: number) => {
     ctx.clearRect(0, 0, width, height);
-    
     ctx.font = `bold ${height * 0.8}px "Inter", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Guide fades from full opacity → invisible as coverage increases
-    const guideAlpha = Math.max(0, 1 - currentCoverage / 100);
 
-    // Glowing fill — faint, warm amber glow
+    const guideAlpha = Math.max(0, 1 - currentCoverage / 100);
     ctx.globalAlpha = guideAlpha * (darkMode ? 0.12 : 0.18);
-    ctx.fillStyle = darkMode ? '#fbbf24' : '#fde68a'; // amber glow
+    ctx.fillStyle = darkMode ? '#fbbf24' : '#fde68a';
     ctx.fillText(displayLetter, width / 2, height / 2 + height * 0.05);
 
-    // Dashed outline
     ctx.globalAlpha = guideAlpha * (darkMode ? 0.25 : 0.35);
     ctx.strokeStyle = darkMode ? '#475569' : '#cbd5e1';
     ctx.lineWidth = 3;
@@ -179,263 +66,116 @@ export default function LetterTracer({
     ctx.globalAlpha = 1;
   }, [displayLetter, darkMode]);
 
+  const generateTargetPoints = useCallback((width: number, height: number) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return [];
+
+    ctx.font = `bold ${canvas.height * 0.8}px "Inter", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(displayLetter, canvas.width / 2, canvas.height / 2 + canvas.height * 0.05);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const points: { x: number; y: number; hit: boolean }[] = [];
+    const step = 25;
+
+    for (let y = 0; y < canvas.height; y += step) {
+      for (let x = 0; x < canvas.width; x += step) {
+        const alpha = imageData[(y * canvas.width + x) * 4 + 3];
+        if (alpha > 50) {
+          points.push({ x, y, hit: false });
+        }
+      }
+    }
+    return points;
+  }, [displayLetter]);
+
+  const handleReadyChange = useCallback((ready: boolean) => {
+    if (ready && !hasPlayedPhonetic && voiceEnabled) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const text = `${letter.toUpperCase()}... ${word}... ${verse}`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.75;
+        utterance.pitch = 1.2;
+        utterance.volume = soundVolume;
+        window.speechSynthesis.speak(utterance);
+      }
+      setHasPlayedPhonetic(true);
+    }
+  }, [hasPlayedPhonetic, letter, word, verse, soundVolume, voiceEnabled]);
+
+  const {
+    canvasRef,
+    coverage,
+    isReady,
+    targetPointsState,
+    particles,
+    cursorPos,
+    isDrawing,
+    startDrawing,
+    draw,
+    endDrawing,
+    reset,
+    undo,
+    redo,
+    playSoundEffect,
+  } = useTracingCanvas({
+    difficulty,
+    darkMode,
+    soundVolume,
+    soundEnabled,
+    renderTemplate,
+    generateTargetPoints,
+    onReadyChange: handleReadyChange,
+  });
+
   useEffect(() => {
-    drawTemplate(0);
-    calculateTargetPoints();
-    setHasPlayedPhonetic(false);
     setShowBanner(false);
     setStars(0);
     setHasTriggeredCelebration(false);
-  }, [drawTemplate, calculateTargetPoints]);
-
-  const isReady = coverage >= config.threshold;
+    setHasPlayedPhonetic(false);
+  }, [displayLetter, word, verse]);
 
   useEffect(() => {
-    if (isReady && !hasPlayedPhonetic) {
-      playSoundEffect('success');
-      playPhoneticSound();
-      setHasPlayedPhonetic(true);
-    }
-  }, [isReady, hasPlayedPhonetic, playPhoneticSound, playSoundEffect]);
-
-  // Trigger celebration at 80% coverage (once)
-  useEffect(() => {
-    if (coverage >= 80 && !hasTriggeredCelebration && hasStarted) {
+    if (coverage >= 80 && !hasTriggeredCelebration && isDrawing) {
       setHasTriggeredCelebration(true);
-      // Calculate star rating: 80-89% = 1 star, 90-94% = 2 stars, 95%+ = 3 stars
       const earnedStars = coverage >= 95 ? 3 : coverage >= 90 ? 2 : 1;
       setStars(earnedStars);
       setShowBanner(true);
       playSoundEffect('magic');
-      // Auto-hide banner after 3.5s
       setTimeout(() => setShowBanner(false), 3500);
     }
-  }, [coverage, hasTriggeredCelebration, hasStarted, playSoundEffect]);
+  }, [coverage, hasTriggeredCelebration, isDrawing, playSoundEffect]);
 
-  const addParticle = (x: number, y: number) => {
-    const id = particleIdRef.current++;
-    setParticles(prev => [...prev.slice(-15), { id, x, y }]);
-    setTimeout(() => {
-      setParticles(prev => prev.filter(p => p.id !== id));
-    }, 1000);
-  };
-
-  const updateCoverage = (x: number, y: number) => {
-    const radius = config.radius;
-    let hitSomething = false;
-
-    setTargetPointsState(prev => {
-      const next = prev.map(pt => {
-        if (!pt.hit) {
-          const dx = pt.x - x;
-          const dy = pt.y - y;
-          if (dx * dx + dy * dy < radius * radius) {
-            hitSomething = true;
-            return { ...pt, hit: true };
-          }
-        }
-        return pt;
-      });
-
-      if (hitSomething) {
-        const hitCount = next.filter(pt => pt.hit).length;
-        setCoverage((hitCount / next.length) * 100);
-        if (isDrawing) addParticle(x, y); // Only add particle trail when actual drawing
-      }
-      return next;
-    });
-  };
-
-  const redrawFromStrokes = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Reset hit states and coverage
-    setTargetPointsState(prev => prev.map(pt => ({ ...pt, hit: false })));
-    setCoverage(0);
-
-    // Redraw all strokes
-    strokes.forEach(stroke => {
-      if (stroke.length === 0) return;
-      
-      ctx.beginPath();
-      ctx.moveTo(stroke[0].x, stroke[0].y);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = config.lineWidth;
-      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
-
-      stroke.forEach(pos => {
-        ctx.lineTo(pos.x, pos.y);
-      });
-      ctx.stroke();
-    });
-
-    // Bulk update hit points for coverage calculation
-    setTargetPointsState(prev => {
-      const next = prev.map(pt => {
-        let hit = false;
-        strokes.forEach(stroke => {
-          stroke.forEach(pos => {
-            const dx = pt.x - pos.x;
-            const dy = pt.y - pos.y;
-            if (dx * dx + dy * dy < config.radius * config.radius) {
-              hit = true;
-            }
-          });
-        });
-        return { ...pt, hit };
-      });
-      const hitCount = next.filter(pt => pt.hit).length;
-      const newCoverage = next.length > 0 ? (hitCount / next.length) * 100 : 0;
-      setCoverage(newCoverage);
-      // Redraw template with updated coverage so guide fades correctly
-      drawTemplate(newCoverage);
-      // Redraw strokes on top of faded template
-      strokes.forEach(stroke => {
-        if (stroke.length === 0) return;
-        const c = canvas.getContext('2d');
-        if (!c) return;
-        c.beginPath();
-        c.moveTo(stroke[0].x, stroke[0].y);
-        c.lineCap = 'round';
-        c.lineJoin = 'round';
-        c.lineWidth = config.lineWidth;
-        c.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
-        c.shadowBlur = 10;
-        c.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
-        stroke.forEach(pos => c.lineTo(pos.x, pos.y));
-        c.stroke();
-      });
-      return next;
-    });
-  }, [strokes, drawTemplate, config.lineWidth, config.radius, darkMode]);
-
-  useEffect(() => {
-    redrawFromStrokes();
-  }, [redrawFromStrokes]);
-
-  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    const pos = getPos(e);
-    setIsDrawing(true);
-    setCursorPos(pos);
-    currentStrokeRef.current = [pos];
-    if (!hasStarted) {
-      playSoundEffect('start');
-    }
-    setHasStarted(true);
-    updateCoverage(pos.x, pos.y);
-    
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) {
-      ctx.beginPath();
-      ctx.moveTo(pos.x, pos.y);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = config.lineWidth;
-      ctx.strokeStyle = darkMode ? '#60a5fa' : '#3b82f6';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = darkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(59, 130, 246, 0.5)';
-    }
-  };
-
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
-    const pos = getPos(e);
-    setCursorPos(pos);
-    currentStrokeRef.current.push(pos);
-    updateCoverage(pos.x, pos.y);
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) {
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-    }
-  };
-
-  const endDrawing = () => {
-    if (isDrawing && currentStrokeRef.current.length > 0) {
-      const completedStroke = [...currentStrokeRef.current];
-      setStrokes(prev => [...prev, completedStroke]);
-      setRedoStack([]);
-      currentStrokeRef.current = [];
-    }
-    setIsDrawing(false);
-    setCursorPos(null);
-  };
-
-  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return {x: 0, y: 0};
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
-    };
-  };
-
-  const undo = () => {
-    if (strokes.length === 0) return;
-    const last = strokes[strokes.length - 1];
-    setStrokes(prev => prev.slice(0, -1));
-    setRedoStack(prev => [...prev, last]);
-  };
-
-  const redo = () => {
-    if (redoStack.length === 0) return;
-    const last = redoStack[redoStack.length - 1];
-    setRedoStack(prev => prev.slice(0, -1));
-    setStrokes(prev => [...prev, last]);
-  };
-
-  const reset = () => {
-    setStrokes([]);
-    setRedoStack([]);
-    currentStrokeRef.current = [];
-    drawTemplate(0);
-    setHasStarted(false);
-    setTargetPointsState(prev => prev.map(pt => ({ ...pt, hit: false })));
-    setCoverage(0);
-    setHasPlayedPhonetic(false);
-    setIsFinished(false);
+  const handleReset = useCallback(() => {
+    reset();
     setShowBanner(false);
     setStars(0);
     setHasTriggeredCelebration(false);
-  };
+    setIsFinished(false);
+    setHasPlayedPhonetic(false);
+  }, [reset]);
 
   return (
     <div className="flex flex-col items-center gap-4 sm:gap-6 w-full max-w-xl">
-
-      {/* 3-Star Accuracy Row */}
       <div className="flex items-center gap-3">
         {[1, 2, 3].map(n => (
           <motion.div
             key={n}
             initial={false}
-            animate={stars >= n
-              ? { scale: [1, 1.4, 1], rotate: [0, 15, -15, 0] }
-              : { scale: 1, rotate: 0 }
-            }
+            animate={stars >= n ? { scale: [1, 1.4, 1], rotate: [0, 15, -15, 0] } : { scale: 1, rotate: 0 }}
             transition={{ duration: 0.5, delay: (n - 1) * 0.15 }}
           >
-            <Star
-              className={`w-8 h-8 sm:w-10 sm:h-10 transition-colors duration-300 ${
-                stars >= n
-                  ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                  : 'text-slate-200 dark:text-slate-700'
-              }`}
-            />
+            <Star className={`w-8 h-8 sm:w-10 sm:h-10 transition-colors duration-300 ${stars >= n ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]' : 'text-slate-200 dark:text-slate-700'}`} />
           </motion.div>
         ))}
       </div>
 
       <div className="relative w-full aspect-square bg-white dark:bg-slate-900 rounded-[32px] sm:rounded-[40px] border-4 sm:border-8 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center overflow-hidden cursor-crosshair transition-colors">
-        {/* Animated Guiding Dots Overlay */}
         <div className="absolute inset-0 pointer-events-none z-0">
           {targetPointsState.map((pt, i) => (
             <motion.div
@@ -444,7 +184,7 @@ export default function LetterTracer({
               animate={{
                 scale: pt.hit ? [1, 1.2, 1.1] : [1, 1.3, 1],
                 opacity: pt.hit ? 0.7 : [0.2, 0.4, 0.2],
-                backgroundColor: pt.hit ? '#3b82f6' : ['#64748b', '#94a3b8', '#64748b'], // Shimmer effect
+                backgroundColor: pt.hit ? '#3b82f6' : ['#64748b', '#94a3b8', '#64748b'],
                 boxShadow: pt.hit ? '0 0 12px rgba(59, 130, 246, 0.6)' : 'none',
               }}
               transition={{
@@ -452,7 +192,7 @@ export default function LetterTracer({
                   repeat: Infinity,
                   duration: pt.hit ? 0.4 : 3,
                   delay: pt.hit ? 0 : (pt.x + pt.y) * 0.003,
-                  ease: "easeInOut"
+                  ease: 'easeInOut',
                 },
                 opacity: {
                   repeat: Infinity,
@@ -464,7 +204,7 @@ export default function LetterTracer({
                   duration: 4,
                   delay: (pt.x + pt.y) * 0.003,
                 },
-                duration: 0.3
+                duration: 0.3,
               }}
               style={{
                 position: 'absolute',
@@ -478,7 +218,6 @@ export default function LetterTracer({
             />
           ))}
 
-          {/* Sparkle Particle Trail */}
           <AnimatePresence>
             {particles.map((p) => (
               <motion.div
@@ -501,27 +240,17 @@ export default function LetterTracer({
             ))}
           </AnimatePresence>
 
-          {/* Active Drawing Glow Aura */}
           {isDrawing && cursorPos && (
             <motion.div
-              animate={{ 
-                scale: [1, 1.4, 1],
-                opacity: [0.3, 0.6, 0.3],
-              }}
-              transition={{ 
-                repeat: Infinity, 
-                duration: 1.5,
-                ease: "easeInOut"
-              }}
+              animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
               style={{
                 position: 'absolute',
                 left: `${(cursorPos.x / 500) * 100}%`,
                 top: `${(cursorPos.y / 500) * 100}%`,
-                width: config.lineWidth * 2.5,
-                height: config.lineWidth * 2.5,
-                background: darkMode 
-                  ? 'radial-gradient(circle, rgba(96, 165, 250, 0.4) 0%, rgba(96, 165, 250, 0) 70%)'
-                  : 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0) 70%)',
+                width:  `${24 * 2.5}px`,
+                height: `${24 * 2.5}px`,
+                background: darkMode ? 'radial-gradient(circle, rgba(96, 165, 250, 0.4) 0%, rgba(96, 165, 250, 0) 70%)' : 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0) 70%)',
                 borderRadius: '50%',
                 transform: 'translate(-50%, -50%)',
                 pointerEvents: 'none',
@@ -532,81 +261,46 @@ export default function LetterTracer({
         </div>
 
         <div className="absolute top-2 sm:top-4 bg-white dark:bg-slate-900 px-3 sm:px-4 text-slate-300 dark:text-slate-600 font-black text-[10px] sm:text-xs uppercase tracking-[0.2em] z-10 flex items-center gap-2 transition-colors">
-          Trace the Letter 
+          Trace the Letter
           {coverage > 0 && (
             <span className={`ml-2 px-2 py-0.5 rounded-full text-white ${isReady ? 'bg-green-500' : 'bg-blue-400'}`}>
               {Math.round(coverage)}%
             </span>
           )}
         </div>
-        
+
         <canvas
           ref={canvasRef}
           width={500}
           height={500}
           className="w-full h-full touch-none z-0"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={endDrawing}
-          onMouseLeave={endDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={endDrawing}
-          onTouchEndCapture={endDrawing}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={endDrawing}
+          onPointerLeave={endDrawing}
+          onPointerCancel={endDrawing}
         />
-        
-        {!hasStarted && (
+
+        {coverage === 0 && !isDrawing && (
           <div className="absolute inset-x-0 bottom-8 sm:bottom-12 flex justify-center pointer-events-none z-10">
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="bg-slate-800 dark:bg-slate-700 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-lg"
-            >
+            <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="bg-slate-800 dark:bg-slate-700 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-lg">
               Start Here ✏️
             </motion.div>
           </div>
         )}
 
-        {/* Progress Ring */}
-        {hasStarted && (
+        {coverage > 0 && (
           <div className="absolute bottom-4 right-4 w-12 h-12 pointer-events-none">
             <svg className="w-full h-full transform -rotate-90">
-              <circle
-                cx="24"
-                cy="24"
-                r="20"
-                stroke="currentColor"
-                strokeWidth="4"
-                fill="transparent"
-                className="text-slate-100 dark:text-slate-800"
-              />
-              <circle
-                cx="24"
-                cy="24"
-                r="20"
-                stroke="currentColor"
-                strokeWidth="4"
-                fill="transparent"
-                strokeDasharray="125.6"
-                strokeDashoffset={125.6 - (125.6 * coverage) / 100}
-                className={`${isReady ? 'text-green-500' : 'text-blue-500'} transition-all duration-300`}
-              />
+              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-slate-100 dark:text-slate-800" />
+              <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray="125.6" strokeDashoffset={125.6 - (125.6 * coverage) / 100} className={`${isReady ? 'text-green-500' : 'text-blue-500'} transition-all duration-300`} />
             </svg>
           </div>
         )}
 
-        {/* Completion Overlay */}
         {isFinished && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-[32px] sm:rounded-[40px]"
-          >
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="text-4xl sm:text-6xl font-black text-green-500 drop-shadow-lg text-center tracking-widest uppercase"
-            >
+          <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-[32px] sm:rounded-[40px]">
+            <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} className="text-4xl sm:text-6xl font-black text-green-500 drop-shadow-lg text-center tracking-widest uppercase">
               Complete!
               <br />
               <span className="text-2xl sm:text-4xl">🌟</span>
@@ -614,75 +308,36 @@ export default function LetterTracer({
           </motion.div>
         )}
 
-        {/* "Wonderful! B is for Bless!" Banner */}
         <AnimatePresence>
           {showBanner && (
-            <motion.div
-              initial={{ opacity: 0, y: 40, scale: 0.85 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -30, scale: 0.9 }}
-              transition={{ type: 'spring', bounce: 0.4 }}
-              className="absolute inset-x-4 bottom-16 sm:bottom-20 z-50 pointer-events-none"
-            >
+            <motion.div initial={{ opacity: 0, y: 40, scale: 0.85 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -30, scale: 0.9 }} transition={{ type: 'spring', bounce: 0.4 }} className="absolute inset-x-4 bottom-16 sm:bottom-20 z-50 pointer-events-none">
               <div className="bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-3xl px-6 py-4 shadow-2xl text-center">
-                <p className="text-lg sm:text-2xl font-black tracking-tight leading-tight">
-                  Wonderful! 🎉
-                </p>
-                <p className="text-sm sm:text-base font-bold opacity-90 mt-0.5">
-                  {letter.toUpperCase()} is for <span className="font-black">{word}</span>!
-                </p>
+                <p className="text-lg sm:text-2xl font-black tracking-tight leading-tight">Wonderful! 🎉</p>
+                <p className="text-sm sm:text-base font-bold opacity-90 mt-0.5">{letter.toUpperCase()} is for <span className="font-black">{word}</span>!</p>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Controls Row */}
       <div className="flex gap-3 sm:gap-4 w-full h-16 sm:h-20">
         <div className="flex gap-2">
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={reset}
-            className="w-16 sm:w-20 bg-slate-100 dark:bg-slate-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shrink-0" title="Reset">
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleReset} className="w-16 sm:w-20 bg-slate-100 dark:bg-slate-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shrink-0" title="Reset">
             <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 dark:text-slate-500" />
           </motion.button>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={undo} disabled={strokes.length === 0}
-            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${strokes.length === 0 ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="Undo">
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={undo} disabled={targetPointsState.length === 0} className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${targetPointsState.length === 0 ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="Undo">
             <Undo2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
           </motion.button>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={redo} disabled={redoStack.length === 0}
-            className={`w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 ${redoStack.length === 0 ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-900 opacity-40 cursor-not-allowed' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="Redo">
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={redo} disabled={false} className="w-16 sm:w-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 transition-all shrink-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700" title="Redo">
             <Redo2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
           </motion.button>
-          {/* Speaker: reads "B… Bless… Every good gift is a blessing from God." */}
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={playPhoneticSound}
-            className="w-16 sm:w-20 bg-blue-50 dark:bg-blue-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-800 transition-all shrink-0" title="Read aloud">
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const text = `${letter.toUpperCase()}... ${word}... ${verse}`; const utterance = new SpeechSynthesisUtterance(text); utterance.rate = 0.75; utterance.pitch = 1.2; utterance.volume = soundVolume; window.speechSynthesis.speak(utterance);} }} className="w-16 sm:w-20 bg-blue-50 dark:bg-blue-900/40 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-800 transition-all shrink-0" title="Read aloud">
             <Volume2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 dark:text-blue-500" />
           </motion.button>
         </div>
 
-        <motion.button
-          whileHover={isReady ? { scale: 1.02, y: -2 } : {}}
-          whileTap={isReady ? { scale: 0.98, y: 0 } : {}}
-          animate={isReady ? {
-            scale: [1, 1.02, 1],
-            boxShadow: ['0 10px 15px -3px rgba(34,197,94,0.3)', '0 20px 25px -5px rgba(34,197,94,0.4)', '0 10px 15px -3px rgba(34,197,94,0.3)'],
-          } : {}}
-          transition={{ repeat: Infinity, duration: 2 }}
-          onClick={() => {
-            if (isReady && !isFinished) {
-              setIsFinished(true);
-              playSoundEffect('magic');
-              onComplete();
-            }
-          }}
-          className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg transition-all ${
-            isReady
-              ? 'bg-green-500 text-white border-green-700 shadow-green-200 dark:shadow-none'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'
-          }`}
-        >
-          <span className="font-black text-sm sm:text-xl uppercase tracking-widest mr-2 sm:mr-4">
-            {isReady ? 'Finish' : 'Keep Tracing!'}
-          </span>
+        <motion.button whileHover={isReady ? { scale: 1.02, y: -2 } : {}} whileTap={isReady ? { scale: 0.98, y: 0 } : {}} onClick={() => { if (isReady && !isFinished) { setIsFinished(true); playSoundEffect('magic'); onComplete(); } }} className={`flex-1 h-16 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center border-b-4 sm:border-b-8 shadow-lg transition-all ${isReady ? 'bg-green-500 text-white border-green-700 shadow-green-200 dark:shadow-none' : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-60'}`}>
+          <span className="font-black text-sm sm:text-xl uppercase tracking-widest mr-2 sm:mr-4">{isReady ? 'Finish' : 'Keep Tracing!'}</span>
           <Check className={`w-6 h-6 sm:w-8 sm:h-8 stroke-[4] ${isReady ? 'animate-bounce' : ''}`} />
         </motion.button>
       </div>

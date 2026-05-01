@@ -1,0 +1,74 @@
+import { motion } from 'motion/react';
+import { Settings, Sun, Moon, Music2, Volume2, User } from 'lucide-react';
+import AvatarCircle from './AvatarCircle';
+import { AppSettings, UserProfile } from '../types';
+
+interface AppHeaderProps {
+  activeProfile: UserProfile | undefined;
+  settings: AppSettings;
+  musicPlaying: boolean;
+  toggleMusic: () => void;
+  toggleSound: () => void;
+  playUISound: (type: 'click' | 'select' | 'reward') => void;
+  onToggleDarkMode: () => void;
+  onOpenParentGate: () => void;
+}
+
+export default function AppHeader({
+  activeProfile,
+  settings,
+  musicPlaying,
+  toggleMusic,
+  toggleSound,
+  playUISound,
+  onToggleDarkMode,
+  onOpenParentGate,
+}: AppHeaderProps) {
+  return (
+    <header className="h-16 sm:h-20 px-4 sm:px-8 flex items-center justify-between bg-slate-50 dark:bg-slate-900 border-b-4 border-slate-100 dark:border-slate-800 z-40 fixed top-0 inset-x-0 transition-colors">
+      <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="relative shrink-0">
+          <div className="relative z-10">
+            {activeProfile ? (
+              <AvatarCircle avatar={activeProfile.avatar} size="sm" />
+            ) : (
+              <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900 ring-4 ring-white dark:ring-slate-800">
+                <User className="w-6 h-6 sm:w-8 sm:h-8" />
+              </div>
+            )}
+          </div>
+          <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }} transition={{ repeat: Infinity, duration: 4 }} className="absolute inset-0 bg-blue-400 rounded-full blur-md -z-0" />
+        </motion.div>
+
+        <div className="overflow-hidden">
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
+            {activeProfile ? `${activeProfile.name}'s Journey` : 'Kids Bible App'}
+          </p>
+          <p className="text-sm sm:text-lg font-bold truncate dark:text-white">Bible ABC Trace</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-6 shrink-0">
+        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { toggleMusic(); playUISound('click'); }} className={`hidden sm:flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all text-xs font-black uppercase tracking-widest ${musicPlaying ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}>
+          <Music2 className={`w-4 h-4 ${musicPlaying ? 'animate-pulse' : ''}`} />
+          {musicPlaying ? 'Music On' : 'Music'}
+        </motion.button>
+
+        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { toggleSound(); playUISound('click'); }} className={`hidden sm:flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all text-xs font-black uppercase tracking-widest ${settings.soundEnabled ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-emerald-300'}`}>
+          <Volume2 className={`w-4 h-4 ${settings.soundEnabled ? 'animate-pulse' : ''}`} />
+          {settings.soundEnabled ? 'Sound On' : 'Sound Off'}
+        </motion.button>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <motion.button whileHover={{ scale: 1.1, rotate: 5 }} whileTap={{ scale: 0.9 }} onClick={() => { onToggleDarkMode(); playUISound('click'); }} className="p-2.5 sm:p-3 bg-white dark:bg-slate-800 border-2 rounded-xl sm:rounded-2xl shadow-sm transition-all border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-400">
+            {settings.darkMode ? <Sun className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" /> : <Moon className="w-5 h-5 sm:w-6 sm:h-6" />}
+          </motion.button>
+
+          <motion.button whileHover={{ scale: 1.1, rotate: -5 }} whileTap={{ scale: 0.9 }} onClick={() => { playUISound('click'); onOpenParentGate(); }} className="p-2.5 sm:p-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl sm:rounded-2xl shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors">
+            <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 dark:text-slate-500" />
+          </motion.button>
+        </div>
+      </div>
+    </header>
+  );
+}

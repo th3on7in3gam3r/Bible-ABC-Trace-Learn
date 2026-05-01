@@ -4,8 +4,8 @@
  */
 
 import React, {useState} from 'react';
-import {X, UserPlus, Settings, Save, Trash2, Edit2, Music, Volume2, Trophy} from 'lucide-react';
-import {AlphabetItem, UserProfile, AppSettings, DEFAULT_ALPHABET} from '../types';
+import {X, UserPlus, Settings, Save, Trash2, Edit2, Music, Volume2, Mic2, Trophy} from 'lucide-react';
+import {AlphabetItem, UserProfile, AppSettings, DEFAULT_ALPHABET, DifficultyLevel} from '../types';
 
 const BADGES = [
   { id: 'explorer', name: 'Explorer', icon: 'sparkle', color: 'bg-green-400', description: 'Started the journey!' },
@@ -18,8 +18,8 @@ const BADGES = [
 
 interface ParentDashboardProps {
   profiles: UserProfile[];
-  onAddProfile: (name: string, avatar?: string, difficulty?: 'easy' | 'medium' | 'hard') => void;
-  onUpdateProfileDifficulty: (id: string, difficulty: 'easy' | 'medium' | 'hard') => void;
+  onAddProfile: (name: string, avatar?: string, difficulty?: DifficultyLevel) => void;
+  onUpdateProfileDifficulty: (id: string, difficulty: DifficultyLevel) => void;
   onDeleteProfile: (id: string) => void;
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
@@ -295,6 +295,34 @@ export default function ParentDashboard({
                  onChange={(e) => onUpdateSettings({ ...settings, soundVolume: parseFloat(e.target.value) })}
                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                />
+             </div>
+
+             <div className="space-y-1">
+               <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                 <Volume2 className="w-3 h-3 text-teal-400" />
+                 Sound FX
+               </label>
+               <button
+                 type="button"
+                 onClick={() => onUpdateSettings({ ...settings, soundEnabled: !settings.soundEnabled })}
+                 className={`w-full px-3 py-2 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition ${settings.soundEnabled ? 'bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-emerald-300'}`}
+               >
+                 {settings.soundEnabled ? 'Enabled' : 'Muted'}
+               </button>
+             </div>
+
+             <div className="space-y-1">
+               <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                 <Mic2 className="w-3 h-3 text-violet-400" />
+                 Voice Hints
+               </label>
+               <button
+                 type="button"
+                 onClick={() => onUpdateSettings({ ...settings, voiceEnabled: !settings.voiceEnabled })}
+                 className={`w-full px-3 py-2 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition ${settings.voiceEnabled ? 'bg-violet-100 dark:bg-violet-900/40 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300' : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-violet-300'}`}
+               >
+                 {settings.voiceEnabled ? 'On' : 'Off'}
+               </button>
              </div>
 
              <div className="space-y-1 col-span-2 md:col-span-1">

@@ -55,7 +55,7 @@ import {
   Music2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import {DEFAULT_ALPHABET, UserProfile, AppSettings, AlphabetItem} from './types';
+import {DEFAULT_ALPHABET, UserProfile, AppSettings, AlphabetItem, DifficultyLevel} from './types';
 import LetterTracer from './components/LetterTracer';
 import SentenceTracer from './components/SentenceTracer';
 import CelebrationOverlay from './components/CelebrationOverlay';
@@ -63,6 +63,9 @@ import ParentDashboard from './components/ParentDashboard';
 import ParentGate from './components/ParentGate';
 import AddProfileModal from './components/AddProfileModal';
 import ColoringPage from './components/ColoringPage';
+import AppHeader from './components/AppHeader';
+import ProgressFooter from './components/ProgressFooter';
+import AvatarCircle from './components/AvatarCircle';
 
 const ICONS: Record<string, any> = {
   user: User,
@@ -121,29 +124,6 @@ const EMOJI_AVATARS: Record<string, string> = {
   angel: '😇', crown: '👑', butterfly: '🦋', turtle: '🐢',
 };
 
-/** Render the avatar circle for a profile — handles both old icon-key format and new "emoji|color" format */
-function AvatarCircle({ avatar, size = 'md' }: { avatar: string; size?: 'sm' | 'md' | 'lg' }) {
-  const sizeClasses = { sm: 'w-11 h-11 text-2xl', md: 'w-16 h-16 text-3xl', lg: 'w-24 h-24 text-5xl' };
-  const cls = sizeClasses[size];
-
-  if (avatar.includes('|')) {
-    const [emojiId, bgColor] = avatar.split('|');
-    const emoji = EMOJI_AVATARS[emojiId] ?? '🐑';
-    return (
-      <div className={`${cls} ${bgColor ?? 'bg-amber-400'} rounded-full flex items-center justify-center ring-4 ring-white dark:ring-slate-800 shadow-md`}>
-        {emoji}
-      </div>
-    );
-  }
-  // Legacy lucide icon format
-  const IconComp = ICONS[avatar] || User;
-  return (
-    <div className={`${cls} bg-blue-500 rounded-full flex items-center justify-center text-white ring-4 ring-white dark:ring-slate-800 shadow-md`}>
-      <IconComp className="w-1/2 h-1/2" />
-    </div>
-  );
-}
-
 export default function App() {
   // --- State ---
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
@@ -163,6 +143,8 @@ export default function App() {
       screenTimeLimit: 0,
       musicVolume: 0.5,
       soundVolume: 0.8,
+      soundEnabled: true,
+      voiceEnabled: true,
       darkMode: false,
     };
   });
@@ -175,6 +157,7 @@ export default function App() {
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showColoringPage, setShowColoringPage] = useState(false);
+  const [rewardToast, setRewardToast] = useState<string | null>(null);
   const [gatePurpose, setGatePurpose] = useState<'settings' | 'addProfile'>('settings');
   const [screenTimeRemaining, setScreenTimeRemaining] = useState<number | null>(null);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
@@ -232,6 +215,10 @@ export default function App() {
     }
   }, [musicPlaying]);
 
+  const toggleSound = useCallback(() => {
+    setSettings(prev => ({ ...prev, soundEnabled: !prev.soundEnabled }));
+  }, []);
+
   // Screen Time Monitor
   useEffect(() => {
     if (settings.screenTimeLimit === 0) {
@@ -261,6 +248,7 @@ export default function App() {
   }, [settings.screenTimeLimit]);
 
   const playUISound = useCallback((type: 'click' | 'select' | 'reward') => {
+    if (!settings.soundEnabled || settings.soundVolume <= 0) return;
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -303,7 +291,7 @@ export default function App() {
     } catch(e) {
       console.error("Audio playback failed", e);
     }
-  }, [settings.soundVolume]);
+  }, [settings.soundEnabled, settings.soundVolume]);
 
 
 
@@ -314,7 +302,7 @@ export default function App() {
   }, [activeProfile, alphabet]);
 
   // --- Handlers ---
-  const addProfile = (name: string, avatar: string = 'bird', difficulty: 'easy' | 'medium' | 'hard' = 'easy') => {
+  const addProfile = (name: string, avatar: string = 'bird', difficulty: DifficultyLevel = 'easy') => {
     const newProfile: UserProfile = {
       id: crypto.randomUUID(),
       name,
@@ -334,7 +322,7 @@ export default function App() {
     if (activeProfileId === id) setActiveProfileId(null);
   };
 
-  const updateProfileDifficulty = (id: string, difficulty: 'easy' | 'medium' | 'hard') => {
+  const updateProfileDifficulty = (id: string, difficulty: DifficultyLevel) => {
     setProfiles(prev => prev.map(p => p.id === id ? { ...p, difficulty } : p));
   };
 
@@ -368,6 +356,7 @@ export default function App() {
     if (!activeProfile || currentLetterIdx === null) return;
     
     const letter = alphabet[currentLetterIdx].letter;
+    const word = alphabet[currentLetterIdx].word;
     const isNewlyCompleted = !activeProfile.progress[letter];
 
     confetti({
@@ -421,13 +410,17 @@ export default function App() {
       return p;
     }));
 
-    // Instead of auto-closing, we stay in the view to show the "Trace the Word" option
-    // or we can auto-switch to word mode after a small delay
+    if (isNewlyCompleted) {
+      setRewardToast(`Wonderful! ${letter} is for ${word}. Coloring unlocked!`);
+      setTimeout(() => setRewardToast(null), 3500);
+    }
+
     setTimeout(() => {
       setViewMode('word');
-      // Unlock coloring page as a reward
-      setShowColoringPage(true);
-    }, 1500);
+      if (isNewlyCompleted) {
+        setShowColoringPage(true);
+      }
+    }, 1250);
   };
 
   const completeWord = () => {
@@ -555,77 +548,34 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* --- Header --- */}
-      <header className="h-16 sm:h-20 px-4 sm:px-8 flex items-center justify-between bg-slate-50 dark:bg-slate-900 border-b-4 border-slate-100 dark:border-slate-800 z-40 fixed top-0 inset-x-0 transition-colors">
-        <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-            <motion.div 
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              className="relative shrink-0"
-            >
-              <div className="relative z-10">
-                {activeProfile
-                  ? <AvatarCircle avatar={activeProfile.avatar} size="sm" />
-                  : <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-blue-900 ring-4 ring-white dark:ring-slate-800"><User className="w-6 h-6 sm:w-8 sm:h-8" /></div>
-                }
-              </div>
-              <motion.div 
-                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-                transition={{ repeat: Infinity, duration: 4 }}
-                className="absolute inset-0 bg-blue-400 rounded-full blur-md -z-0"
-              />
-            </motion.div>
-          <div className="overflow-hidden">
-            <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
-              {activeProfile ? `${activeProfile.name}'s Journey` : 'Kids Bible App'}
-            </p>
-            <p className="text-sm sm:text-lg font-bold truncate dark:text-white">Bible ABC Trace</p>
-          </div>
-        </div>
+      <AppHeader
+        activeProfile={activeProfile}
+        settings={settings}
+        musicPlaying={musicPlaying}
+        toggleMusic={toggleMusic}
+        toggleSound={toggleSound}
+        playUISound={playUISound}
+        onToggleDarkMode={() => setSettings({ ...settings, darkMode: !settings.darkMode })}
+        onOpenParentGate={() => {
+          playUISound('click');
+          setGatePurpose('settings');
+          setShowParentGate(true);
+        }}
+      />
 
-        <div className="flex items-center gap-2 sm:gap-6 shrink-0">
-          {/* Music toggle — replaces the cryptic dots */}
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => { toggleMusic(); playUISound('click'); }}
-            className={`hidden sm:flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all text-xs font-black uppercase tracking-widest ${
-              musicPlaying
-                ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-300'
-            }`}
+      <AnimatePresence>
+        {rewardToast && (
+          <motion.div
+            key="reward-toast"
+            initial={{ opacity: 0, y: -24, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -24, scale: 0.95 }}
+            className="fixed top-28 left-1/2 z-50 -translate-x-1/2 rounded-3xl border-2 border-blue-200 bg-blue-50 dark:bg-slate-800 dark:border-blue-900 px-6 py-4 shadow-2xl shadow-blue-100/80 dark:shadow-black/20 text-slate-900 dark:text-slate-100"
           >
-            <Music2 className={`w-4 h-4 ${musicPlaying ? 'animate-pulse' : ''}`} />
-            {musicPlaying ? 'Music On' : 'Music'}
-          </motion.button>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <motion.button 
-              whileHover={{ scale: 1.1, rotate: 5 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                setSettings({ ...settings, darkMode: !settings.darkMode });
-                playUISound('click');
-              }}
-              className={`p-2.5 sm:p-3 bg-white dark:bg-slate-800 border-2 rounded-xl sm:rounded-2xl shadow-sm transition-all border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-400`}
-            >
-              {settings.darkMode ? <Sun className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" /> : <Moon className="w-5 h-5 sm:w-6 sm:h-6" />}
-            </motion.button>
-
-            <motion.button 
-              whileHover={{ scale: 1.1, rotate: -5 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                playUISound('click');
-                setGatePurpose('settings');
-                setShowParentGate(true);
-              }}
-              className="p-2.5 sm:p-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl sm:rounded-2xl shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-            >
-              <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 dark:text-slate-500" />
-            </motion.button>
-          </div>
-        </div>
-      </header>
+            <p className="font-black text-sm sm:text-base text-center">{rewardToast}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="pt-20 flex-1 flex flex-col min-h-0">
         <AnimatePresence mode="wait">
@@ -886,12 +836,16 @@ export default function App() {
                 {viewMode === 'letter' ? (
                   <LetterTracer 
                     letter={alphabet[currentLetterIdx].letter}
+                    word={alphabet[currentLetterIdx].word}
+                    verse={alphabet[currentLetterIdx].verse}
                     isUppercase={isUppercase}
                     onComplete={completeLetter}
                     voiceRecording={activeProfile.voiceRecordings[alphabet[currentLetterIdx].letter]}
                     onRecord={handleRecord}
                     difficulty={activeProfile.difficulty}
                     soundVolume={settings.soundVolume}
+                    soundEnabled={settings.soundEnabled}
+                    voiceEnabled={settings.voiceEnabled}
                     darkMode={settings.darkMode}
                   />
                 ) : (
@@ -900,6 +854,8 @@ export default function App() {
                     onComplete={completeWord}
                     difficulty={activeProfile.difficulty}
                     soundVolume={settings.soundVolume}
+                    soundEnabled={settings.soundEnabled}
+                    voiceEnabled={settings.voiceEnabled}
                     darkMode={settings.darkMode}
                   />
                 )}
@@ -930,42 +886,15 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* --- Simple Footer Progress --- */}
-      {currentLetterIdx !== null && (
-        <div className="h-20 sm:h-24 px-4 sm:px-12 py-3 sm:py-4 flex items-center justify-between pointer-events-none fixed bottom-0 inset-x-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-40 border-t-2 border-slate-100 dark:border-slate-800 transition-colors">
-          <button 
-            className="h-12 w-12 sm:h-16 sm:w-16 bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-center border-b-4 border-slate-200 dark:border-slate-700 pointer-events-auto shadow-sm active:translate-y-1 active:border-b-0 transition-all font-black"
-            onClick={() => {
-              playUISound('click');
-              setCurrentLetterIdx(null);
-              setViewMode('letter');
-            }}
-          >
-             <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400 dark:text-slate-500" />
-          </button>
-          
-          <div className="flex gap-2 sm:gap-4 pointer-events-auto">
-             {['ABC', 'abc'].map((text) => (
-                <button
-                  key={text}
-                  onClick={() => {
-                    playUISound('click');
-                    setIsUppercase(text === 'ABC');
-                  }}
-                  className={`h-12 px-4 sm:h-16 sm:px-6 rounded-xl sm:rounded-2xl flex items-center justify-center font-black uppercase tracking-widest text-xs sm:text-lg border-b-4 transition-all ${
-                    (text === 'ABC' && isUppercase) || (text === 'abc' && !isUppercase)
-                      ? 'bg-blue-600 border-blue-800 text-white shadow-lg scale-105'
-                      : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-600'
-                  }`}
-                >
-                  {text}
-                </button>
-             ))}
-          </div>
+      <ProgressFooter
+        currentLetterIdx={currentLetterIdx}
+        setCurrentLetterIdx={setCurrentLetterIdx}
+        setViewMode={setViewMode}
+        isUppercase={isUppercase}
+        setIsUppercase={setIsUppercase}
+        playUISound={playUISound}
+      />
 
-          <div className="h-12 w-12 sm:h-16 sm:w-16 invisible" />
-        </div>
-      )}
       {showDashboard && (
         <ParentDashboard 
           profiles={profiles}

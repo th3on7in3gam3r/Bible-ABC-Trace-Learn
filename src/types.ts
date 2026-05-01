@@ -11,6 +11,33 @@ export interface AlphabetItem {
   reference: string;
 }
 
+export type DifficultyLevel = 'easy' | 'medium' | 'hard';
+
+export interface TracingPoint {
+  x: number;
+  y: number;
+  hit: boolean;
+}
+
+export interface TracingParticle {
+  id: number;
+  x: number;
+  y: number;
+}
+
+export interface TracingConfig {
+  lineWidth: number;
+  radius: number;
+  threshold: number;
+  dotPulse: number;
+}
+
+export const TRACE_CONFIG: Record<DifficultyLevel, TracingConfig> = {
+  easy: { lineWidth: 36, radius: 45, threshold: 60, dotPulse: 4 },
+  medium: { lineWidth: 24, radius: 30, threshold: 75, dotPulse: 3 },
+  hard: { lineWidth: 16, radius: 20, threshold: 85, dotPulse: 2 },
+};
+
 export const DEFAULT_ALPHABET: AlphabetItem[] = [
   { letter: 'A', word: 'Adam', verse: 'God created Adam in His image.', reference: 'Genesis 1:27', illustration: 'user' },
   { letter: 'B', word: 'Bless', verse: 'Every good gift is a blessing from God.', reference: 'James 1:17', illustration: 'gift' },
@@ -44,7 +71,7 @@ export interface UserProfile {
   id: string;
   name: string;
   avatar: string; // Icon identifier (e.g., 'angel', 'dove')
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: DifficultyLevel;
   points: number;
   badges: string[];
   progress: Record<string, boolean>; // letter -> completed
@@ -57,5 +84,7 @@ export interface AppSettings {
   screenTimeLimit: number; // in minutes
   musicVolume: number;
   soundVolume: number;
+  soundEnabled: boolean;
+  voiceEnabled: boolean;
   darkMode: boolean;
 }
