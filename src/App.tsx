@@ -62,6 +62,7 @@ import AppHeader from './components/AppHeader';
 import ProgressFooter from './components/ProgressFooter';
 import AvatarCircle from './components/AvatarCircle';
 import SpellingGame from './components/SpellingGame';
+import WordCanvas from './components/WordCanvas';
 
 const ICONS: Record<string, any> = {
   user: User,
@@ -137,6 +138,7 @@ export default function App() {
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showColoringPage, setShowColoringPage] = useState(false);
+  const [showWordCanvas, setShowWordCanvas] = useState(false);
   const [rewardToast, setRewardToast] = useState<string | null>(null);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
   const [showTimeUp, setShowTimeUp] = useState(false);
@@ -686,13 +688,19 @@ export default function App() {
                   <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[10px] sm:text-sm mt-1">Pick a letter to start your journey</p>
                 </div>
                 <div className="flex gap-3 sm:gap-4 justify-center">
-
-
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => { playUISound('select'); setShowWordCanvas(true); }}
+                    className="hidden sm:flex items-center gap-2 bg-sky-500/10 dark:bg-sky-900/30 px-4 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-sky-300 dark:border-sky-700 font-black text-xs uppercase tracking-widest text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all shadow-sm"
+                  >
+                    🎨 Word Canvas
+                  </motion.button>
                   <div className="bg-parchment-100 dark:bg-slate-800 px-4 sm:px-6 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-parchment-200 dark:border-slate-700 flex items-center gap-2 sm:gap-4">
                      <span className="text-xl sm:text-2xl">⭐</span>
                      <span className="text-xl sm:text-2xl font-black text-gold-600 dark:text-gold-400">{activeProfile.points}</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setActiveProfileId(null)}
                     className="bg-slate-100 dark:bg-slate-800 px-4 sm:px-6 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-sm sm:text-base whitespace-nowrap shadow-sm"
                   >
@@ -768,6 +776,18 @@ export default function App() {
                   );
                 })}
               </motion.div>
+
+              {/* Mobile Word Canvas FAB */}
+              <div className="flex justify-center sm:hidden pb-2">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => { playUISound('select'); setShowWordCanvas(true); }}
+                  className="flex items-center gap-2 bg-sky-500/10 px-6 py-3 rounded-2xl border-2 border-sky-300 font-black text-xs uppercase tracking-widest text-sky-600 hover:bg-sky-100 transition-all shadow-sm"
+                >
+                  🎨 Word Canvas
+                </motion.button>
+              </div>
             </motion.div>
           ) : (
             /* --- Letter Detail View (Split Screen) --- */
@@ -986,6 +1006,18 @@ export default function App() {
           onClose={() => setShowCelebration(false)}
         />
       )}
+
+      <AnimatePresence>
+        {showWordCanvas && (
+          <WordCanvas
+            onClose={() => setShowWordCanvas(false)}
+            soundVolume={settings.soundVolume}
+            soundEnabled={settings.soundEnabled}
+            voiceEnabled={settings.voiceEnabled}
+            darkMode={settings.darkMode}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
