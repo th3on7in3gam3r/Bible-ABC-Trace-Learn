@@ -22,7 +22,7 @@ interface SpellingGameProps {
 
 type TileState = 'empty' | 'correct' | 'wrong';
 
-interface Tile {
+interface PlacedTile {
   letter: string;
   state: TileState;
 }
@@ -64,14 +64,15 @@ export default function SpellingGame({
 }: SpellingGameProps) {
   const target = word.toUpperCase();
 
-  const [tiles, setTiles] = useState<Tile[]>(() =>
+  const [tiles, setTiles] = useState<PlacedTile[]>(() =>
     target.split('').map(() => ({ letter: '', state: 'empty' as TileState }))
   );
   const [letterBank, setLetterBank] = useState<string[]>(() => buildLetterBank(word));
   const [usedIndices, setUsedIndices] = useState<Set<number>>(new Set());
-  const [wrongIdx, setWrongIdx] = useState<number | null>(null); // bank button that was wrong
+  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
+  const [wrongHint, setWrongHint] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [nextTile, setNextTile] = useState(0); // index of next tile to fill
+  const [nextTile, setNextTile] = useState(0);
   const hasSpokenRef = useRef(false);
 
   // Speak the word on mount
@@ -178,10 +179,11 @@ export default function SpellingGame({
         }, 200);
       }
     } else {
-      // Wrong
+      // Wrong — shake + gentle hint
       playTone('wrong');
       setWrongIdx(bankIdx);
-      setTimeout(() => setWrongIdx(null), 500);
+      setWrongHint(true);
+      setTimeout(() => { setWrongIdx(null); setWrongHint(false); }, 900);
     }
   }, [isComplete, usedIndices, nextTile, target, tiles, playTone, word, voiceEnabled, soundVolume]);
 
@@ -190,6 +192,7 @@ export default function SpellingGame({
     setLetterBank(buildLetterBank(word));
     setUsedIndices(new Set());
     setWrongIdx(null);
+    setWrongHint(false);
     setIsComplete(false);
     setNextTile(0);
   }, [target, word]);
@@ -246,6 +249,21 @@ export default function SpellingGame({
       <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 italic text-center px-4 leading-relaxed">
         "{verse}"
       </p>
+
+      {/* Wrong-tap hint */}
+      <AnimatePresence>
+        {wrongHint && (
+          <motion.p
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="text-sm font-black text-red-400 dark:text-red-400 text-center"
+          >
+            Not that one — try again! 🤔
+          </motion.p>
+        )}
+      </AnimatePresence>
 
       {/* Letter bank */}
       <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">

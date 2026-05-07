@@ -56,9 +56,6 @@ const SUGGESTIONS = [
   'LAMB', 'DOVE', 'STAR', 'KING', 'HOLY', 'WORD',
 ];
 
-let idCounter = 0;
-const uid = () => `l-${++idCounter}`;
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function WordCanvas({
@@ -70,12 +67,14 @@ export default function WordCanvas({
 }: WordCanvasProps) {
   const [placed, setPlaced] = useState<PlacedLetter[]>([]);
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [blocked, setBlocked] = useState(false);   // filter triggered
+  const [blocked, setBlocked] = useState(false);
   const [celebrated, setCelebrated] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
   const dropZoneRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<DragState | null>(null);   // sync ref for pointer handlers
+  const dragRef = useRef<DragState | null>(null);
+  const idCounterRef = useRef(0);                        // fix: was module-level mutable
+  const uid = () => `l-${++idCounterRef.current}`;
 
   const word = placed.map(p => p.letter).join('');
 
@@ -300,14 +299,14 @@ export default function WordCanvas({
       </AnimatePresence>
 
       {/* ── Drop zone (canvas) ── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 gap-4 min-h-0">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 gap-4 min-h-0 overflow-y-auto">
 
-        {/* The paper canvas */}
+        {/* The paper canvas — flex-1 so it fills all available vertical space */}
         <motion.div
           ref={dropZoneRef}
           animate={blocked ? { x: [-8, 8, -6, 6, 0] } : { x: 0 }}
           transition={blocked ? { duration: 0.35 } : {}}
-          className={`w-full max-w-2xl min-h-[120px] sm:min-h-[160px] rounded-[32px] border-4 border-dashed flex flex-col items-center justify-center gap-3 transition-all relative overflow-hidden ${
+          className={`w-full max-w-2xl flex-1 min-h-[180px] rounded-[32px] border-4 border-dashed flex flex-col items-center justify-center gap-3 transition-all relative overflow-hidden ${
             blocked
               ? 'border-red-400 bg-red-50 dark:bg-red-900/20'
               : celebrated

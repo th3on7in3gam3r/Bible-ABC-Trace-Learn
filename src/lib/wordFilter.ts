@@ -1,22 +1,29 @@
 /**
  * Client-side word filter for kids' app.
- * Checks against a list of profanity/slur roots using substring matching.
+ * Checks against a list of profanity/slur roots using smart boundary matching.
  * Intentionally does NOT log or expose the blocked words to the UI.
+ *
+ * Strategy:
+ *  - Long roots (4+ chars): substring match — catches conjugations/plurals
+ *  - Short roots (1-3 chars): whole-word match only — prevents false positives
+ *    on innocent words like GRASS (contains "ass"), HELP (contains "hel"),
+ *    MASS, PASS, CLASS, HELLO, SHELTER, etc.
  */
 
-// Root stems — the filter checks if the input CONTAINS any of these as a substring.
-// Using roots rather than exact words catches plurals, conjugations, and variations.
-const BLOCKED_ROOTS: string[] = [
-  // Profanity
-  'fuck','fuk','fck','shit','sht','cunt','cnt','bitch','btch','ass','arse',
-  'cock','cok','dick','dik','piss','pis','prick','prik','slut','slt',
-  'whore','whor','bastard','bastar','damn','dammit','crap','fag','fags',
-  'nigger','nigga','nigg','spic','spik','kike','chink','gook','wetback',
-  'retard','retrd','dyke','twat','wank','jerk','poop','poo','butt',
-  'boob','boobs','tit','tits','titt','penis','vagina','vag','anus',
-  'anal','sex','sexy','porn','nude','naked','kill','murder','rape',
-  'molest','abuse','drug','meth','heroin','cocaine','weed','dope',
-  'hell','hel','satan','devil','666','nazi','hate',
+// Long roots (4+ chars) — substring match
+const LONG_ROOTS: string[] = [
+  'fuck','fuk','shit','cunt','bitch','arse','cock','dick','piss',
+  'prick','slut','whore','whor','bastard','bastar','damn','dammit',
+  'crap','fags','nigg','spic','spik','kike','chink','gook','wetback',
+  'retard','retrd','dyke','twat','wank','boob','tits','titt','penis',
+  'vagina','anus','anal','sexy','porn','nude','naked','kill','murder',
+  'rape','molest','abuse','meth','heroin','cocaine','satan','devil',
+  'nazi','hate',
+];
+
+// Short roots (1-3 chars) — whole-word match only
+const SHORT_ROOTS: string[] = [
+  'ass','fag','vag','sex','poo','tit','666',
 ];
 
 /**
@@ -24,7 +31,14 @@ const BLOCKED_ROOTS: string[] = [
  * Returns false if it matches any blocked root.
  */
 export function isWordSafe(word: string): boolean {
-  const normalized = word.toLowerCase().replace(/[^a-z]/g, '');
+  const normalized = word.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (normalized.length === 0) return true;
-  return !BLOCKED_ROOTS.some(root => normalized.includes(root));
+
+  // Long roots: simple substring check
+  if (LONG_ROOTS.some(root => normalized.includes(root))) return false;
+
+  // Short roots: only block if the root IS the entire word
+  if (SHORT_ROOTS.some(root => normalized === root)) return false;
+
+  return true;
 }
