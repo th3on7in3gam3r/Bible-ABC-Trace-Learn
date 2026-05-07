@@ -687,12 +687,12 @@ export default function App() {
                   </div>
                   <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[10px] sm:text-sm mt-1">Pick a letter to start your journey</p>
                 </div>
-                <div className="flex gap-3 sm:gap-4 justify-center">
+                <div className="flex gap-3 sm:gap-4 justify-center flex-wrap">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { playUISound('select'); setShowWordCanvas(true); }}
-                    className="hidden sm:flex items-center gap-2 bg-sky-500/10 dark:bg-sky-900/30 px-4 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-2 border-sky-300 dark:border-sky-700 font-black text-xs uppercase tracking-widest text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all shadow-sm"
+                    className="flex items-center gap-2 bg-sky-500 px-4 py-2 sm:py-4 rounded-2xl sm:rounded-3xl border-4 border-sky-600 font-black text-xs sm:text-sm uppercase tracking-widest text-white hover:bg-sky-600 transition-all shadow-lg shadow-sky-200/50 dark:shadow-none"
                   >
                     🎨 Word Canvas
                   </motion.button>
@@ -777,17 +777,6 @@ export default function App() {
                 })}
               </motion.div>
 
-              {/* Mobile Word Canvas FAB */}
-              <div className="flex justify-center sm:hidden pb-2">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => { playUISound('select'); setShowWordCanvas(true); }}
-                  className="flex items-center gap-2 bg-sky-500/10 px-6 py-3 rounded-2xl border-2 border-sky-300 font-black text-xs uppercase tracking-widest text-sky-600 hover:bg-sky-100 transition-all shadow-sm"
-                >
-                  🎨 Word Canvas
-                </motion.button>
-              </div>
             </motion.div>
           ) : (
             /* --- Letter Detail View (Split Screen) --- */
