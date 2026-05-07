@@ -61,6 +61,7 @@ import ColoringPage from './components/ColoringPage';
 import AppHeader from './components/AppHeader';
 import ProgressFooter from './components/ProgressFooter';
 import AvatarCircle from './components/AvatarCircle';
+import SpellingGame from './components/SpellingGame';
 
 const ICONS: Record<string, any> = {
   user: User,
@@ -129,7 +130,7 @@ export default function App() {
   });
 
   const [currentLetterIdx, setCurrentLetterIdx] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'letter' | 'word'>('letter');
+  const [viewMode, setViewMode] = useState<'letter' | 'word' | 'spell'>('letter');
   const [isUppercase, setIsUppercase] = useState(true);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showParentGate, setShowParentGate] = useState(false);
@@ -402,9 +403,7 @@ export default function App() {
 
   const completeWord = () => {
     if (!activeProfile || currentLetterIdx === null) return;
-    
-    const letter = alphabet[currentLetterIdx].letter;
-    
+
     confetti({
       particleCount: 150,
       spread: 100,
@@ -416,41 +415,43 @@ export default function App() {
       if (p.id === activeProfile.id) {
         const newPoints = p.points + 20;
         const newBadges = [...p.badges];
-        
-        if (newPoints >= 100 && !newBadges.includes('star-gazer')) {
-          newBadges.push('star-gazer');
-          playUISound('reward');
-        }
-        if (newPoints >= 500 && !newBadges.includes('faithful')) {
-          newBadges.push('faithful');
-          playUISound('reward');
-        }
-        if (newPoints >= 1000 && !newBadges.includes('alpha-pro')) {
-          newBadges.push('alpha-pro');
-          playUISound('reward');
-        }
-
-        return {
-          ...p,
-          points: newPoints,
-          badges: newBadges,
-        };
+        if (newPoints >= 100 && !newBadges.includes('star-gazer')) { newBadges.push('star-gazer'); playUISound('reward'); }
+        if (newPoints >= 500 && !newBadges.includes('faithful')) { newBadges.push('faithful'); playUISound('reward'); }
+        if (newPoints >= 1000 && !newBadges.includes('alpha-pro')) { newBadges.push('alpha-pro'); playUISound('reward'); }
+        return { ...p, points: newPoints, badges: newBadges };
       }
       return p;
     }));
 
-    setTimeout(() => {
-      setCurrentLetterIdx(null);
-      setViewMode('letter');
+    // After tracing the word → go to spelling game
+    setTimeout(() => setViewMode('spell'), 1800);
+  };
 
-      // Check if all letters are completed
-      if (activeProfile) {
-        const completedCount = Object.keys(activeProfile.progress).length;
-        if (completedCount === alphabet.length) {
-          setTimeout(() => setShowCelebration(true), 500);
-        }
+  const completeSpelling = () => {
+    if (!activeProfile || currentLetterIdx === null) return;
+
+    // Award 15 bonus points for spelling
+    setProfiles(prev => prev.map(p => {
+      if (p.id === activeProfile.id) {
+        const newPoints = p.points + 15;
+        const newBadges = [...p.badges];
+        if (newPoints >= 100 && !newBadges.includes('star-gazer')) { newBadges.push('star-gazer'); playUISound('reward'); }
+        if (newPoints >= 500 && !newBadges.includes('faithful')) { newBadges.push('faithful'); playUISound('reward'); }
+        if (newPoints >= 1000 && !newBadges.includes('alpha-pro')) { newBadges.push('alpha-pro'); playUISound('reward'); }
+        return { ...p, points: newPoints, badges: newBadges };
       }
-    }, 2000);
+      return p;
+    }));
+
+    setCurrentLetterIdx(null);
+    setViewMode('letter');
+
+    if (activeProfile) {
+      const completedCount = Object.keys(activeProfile.progress).length;
+      if (completedCount === alphabet.length) {
+        setTimeout(() => setShowCelebration(true), 500);
+      }
+    }
   };
 
   const handleRecord = async () => {
@@ -846,52 +847,77 @@ export default function App() {
 
               {/* Tracing Area (Bottom on Mobile, Left on Desktop) */}
               <div className="w-full lg:w-1/2 flex flex-col items-center justify-center order-1 lg:order-1 gap-4">
-                {viewMode === 'letter' ? (
-                  <LetterTracer 
-                    letter={alphabet[currentLetterIdx].letter}
-                    word={alphabet[currentLetterIdx].word}
-                    verse={alphabet[currentLetterIdx].verse}
-                    isUppercase={isUppercase}
-                    onComplete={completeLetter}
-                    voiceRecording={activeProfile.voiceRecordings[alphabet[currentLetterIdx].letter]}
-                    onRecord={handleRecord}
-                    difficulty={activeProfile.difficulty}
-                    soundVolume={settings.soundVolume}
-                    soundEnabled={settings.soundEnabled}
-                    voiceEnabled={settings.voiceEnabled}
-                    darkMode={settings.darkMode}
-                  />
-                ) : (
-                  <SentenceTracer 
-                    sentence={alphabet[currentLetterIdx].word}
-                    onComplete={completeWord}
-                    difficulty={activeProfile.difficulty}
-                    soundVolume={settings.soundVolume}
-                    soundEnabled={settings.soundEnabled}
-                    voiceEnabled={settings.voiceEnabled}
-                    darkMode={settings.darkMode}
-                  />
-                )}
+                <AnimatePresence mode="wait">
+                  {viewMode === 'letter' && (
+                    <motion.div key="letter" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="w-full">
+                      <LetterTracer
+                        letter={alphabet[currentLetterIdx].letter}
+                        word={alphabet[currentLetterIdx].word}
+                        verse={alphabet[currentLetterIdx].verse}
+                        isUppercase={isUppercase}
+                        onComplete={completeLetter}
+                        voiceRecording={activeProfile.voiceRecordings[alphabet[currentLetterIdx].letter]}
+                        onRecord={handleRecord}
+                        difficulty={activeProfile.difficulty}
+                        soundVolume={settings.soundVolume}
+                        soundEnabled={settings.soundEnabled}
+                        voiceEnabled={settings.voiceEnabled}
+                        darkMode={settings.darkMode}
+                      />
+                    </motion.div>
+                  )}
+                  {viewMode === 'word' && (
+                    <motion.div key="word" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="w-full">
+                      <SentenceTracer
+                        sentence={alphabet[currentLetterIdx].word}
+                        onComplete={completeWord}
+                        difficulty={activeProfile.difficulty}
+                        soundVolume={settings.soundVolume}
+                        soundEnabled={settings.soundEnabled}
+                        voiceEnabled={settings.voiceEnabled}
+                        darkMode={settings.darkMode}
+                      />
+                    </motion.div>
+                  )}
+                  {viewMode === 'spell' && (
+                    <motion.div key="spell" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="w-full flex justify-center">
+                      <SpellingGame
+                        word={alphabet[currentLetterIdx].word}
+                        letter={alphabet[currentLetterIdx].letter}
+                        verse={alphabet[currentLetterIdx].verse}
+                        illustration={(() => {
+                          const IconComp = ICONS[alphabet[currentLetterIdx].illustration] || Star;
+                          return <IconComp className="w-full h-full text-gold-500 dark:text-gold-400" strokeWidth={1} />;
+                        })()}
+                        onComplete={completeSpelling}
+                        soundVolume={settings.soundVolume}
+                        soundEnabled={settings.soundEnabled}
+                        voiceEnabled={settings.voiceEnabled}
+                        darkMode={settings.darkMode}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl transition-colors">
-                  <button
-                    onClick={() => {
-                      playUISound('select');
-                      setViewMode('letter');
-                    }}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'letter' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 dark:text-slate-500'}`}
-                  >
-                    Letter
-                  </button>
-                  <button
-                    onClick={() => {
-                      playUISound('select');
-                      setViewMode('word');
-                    }}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'word' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 dark:text-slate-500'}`}
-                  >
-                    Word
-                  </button>
+                {/* Mode tabs */}
+                <div className="flex gap-1 p-1 bg-parchment-100 dark:bg-slate-800 rounded-2xl transition-colors">
+                  {([
+                    { id: 'letter', label: '✏️ Trace' },
+                    { id: 'word',   label: '📝 Word' },
+                    { id: 'spell',  label: '🔤 Spell' },
+                  ] as const).map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => { playUISound('select'); setViewMode(tab.id); }}
+                      className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all ${
+                        viewMode === tab.id
+                          ? 'bg-white dark:bg-slate-700 text-gold-600 dark:text-gold-400 shadow-sm'
+                          : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </motion.div>

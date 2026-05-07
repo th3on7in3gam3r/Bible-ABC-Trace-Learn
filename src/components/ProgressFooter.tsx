@@ -4,7 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 interface ProgressFooterProps {
   currentLetterIdx: number | null;
   setCurrentLetterIdx: (value: number | null) => void;
-  setViewMode: (mode: 'letter' | 'word') => void;
+  setViewMode: (mode: 'letter' | 'word' | 'spell') => void;
   isUppercase: boolean;
   setIsUppercase: (value: boolean) => void;
   playUISound: (type: 'click' | 'select' | 'reward') => void;
