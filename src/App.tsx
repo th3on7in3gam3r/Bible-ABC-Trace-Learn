@@ -497,7 +497,7 @@ export default function App() {
   // --- Views ---
 
   return (
-    <div className="min-h-screen bg-parchment-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 select-none overflow-x-hidden flex flex-col pb-20 sm:pb-0 transition-colors duration-300">
+    <div className="min-h-screen bg-parchment-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 select-none overflow-x-hidden flex flex-col pb-24 sm:pb-6 transition-colors duration-300">
       {/* --- Screen Time Warning --- */}
       <AnimatePresence>
         {showTimeWarning && screenTimeRemaining !== null && (
@@ -1007,6 +1007,13 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* ── Site credit ── */}
+      <div className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-center py-1.5 bg-parchment-100/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-parchment-200 dark:border-slate-800 pointer-events-none">
+        <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.25em] text-gold-500 dark:text-gold-600">
+          ✦ Made by <span className="text-gold-600 dark:text-gold-500">BibleFunLand</span> ✦
+        </p>
+      </div>
     </div>
   );
 }
